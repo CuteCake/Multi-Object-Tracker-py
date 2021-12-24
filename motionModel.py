@@ -88,6 +88,29 @@ class ConstantVelocityFilter(BaseFilter):
     #TODO build this CVCT EKF (or UKF) filter
 
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):
+    '''
+    To C.K. :
+    
+    Fill all the questions first:
+
+    The state space is defined as:
+    [x, y, ?
+
+    The observation space is defined as:
+    [x, y]
+
+    The state transition model is:
+    x(k+1) = ?
+    y(k+1) = ?
+    twist(k+1) = twist(k) + turnRate(k) * dt
+    turnRate(k+1) = turnRate(k) 
+    It can only be represented as a bunch of equations.
+
+    The observation model is:
+    x(k) = x(k)
+    y(k) = y(k)
+    It is linear, that's why it can be represented as a matrix.
+    '''
     def __init__(self, x=0, y=0, v=0, twist=0, turnRate=0, \
         stateNoise=0.5,observationNoise=10, id=None):
         #These are the state variables:
