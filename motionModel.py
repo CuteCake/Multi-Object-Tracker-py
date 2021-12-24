@@ -72,6 +72,7 @@ class ConstantVelocityFilter(BaseFilter):
     #     self.theta = state[2]
     #     self.v = state[3]
 
+    #TODO build this CVCT EKF filter (or use UKF if you want)
     class ConstantVelocityConstantTurningRateFilter(BaseFilter):
         def __init__(self, x=0, y=0, v=0, twist=0, turnRate=0, \
             stateNoise=0.5,observationNoise=10, id=None):

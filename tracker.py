@@ -8,8 +8,14 @@ import pygame
 from enviroment import Point, PointsEnv
 from motionModel import ConstantVelocityFilter
 
-
-class BaseTracker: #This is a simple Extended Kalman Filter tracker
+class BaseTracker: #Base class for tracker, should be inherited (and overwritten by real tracker)
+    def __init__(self) -> None:
+        pass
+    def updateTracker(self, observation, dt) -> None:
+        raise NotImplementedError
+        return self.state_estimate  
+        
+class SingleTracker(BaseTracker): #This is a simple Extended Kalman Filter tracker
     '''
     This is a single object Kalman Filter tracker
     '''
@@ -47,7 +53,7 @@ if __name__ == "__main__":
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
     env = PointsEnv(640, 480, 10)
-    tracker = BaseTracker()
+    tracker = SingleTracker()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
