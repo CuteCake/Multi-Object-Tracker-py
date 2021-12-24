@@ -5,7 +5,9 @@ from enviroment import Point, PointsEnv
 
 class BaseFilter: #This is a template for motion filters, should be overwritten
     def __init__(self):
-        pass
+        self.track_id = None
+        self.isConfirmedTrack = False
+        
     def update(self, observation, dt):
         raise NotImplementedError
         return observation
@@ -19,7 +21,18 @@ class ConstantVelocityFilter(BaseFilter):
     The observation space is defined as:
     [x, y]
 
-    The 
+    The state transition model is:
+    x(k+1) = x(k) + vx(k) * dt
+    y(k+1) = y(k) + vy(k) * dt
+    vx(k+1) = vx(k)
+    vy(k+1) = vy(k)
+    It is linear, that's why it can be represented as a matrix.
+    But in CVCT it can only be represented as a bunch of equations.
+
+    The observation model is:
+    x(k) = x(k)
+    y(k) = y(k)
+    It is linear, that's why it can be represented as a matrix.
     '''
     def __init__(self, x=0, y=0, vx=0, vy=0, \
         stateNoise=0.5,observationNoise=10, id=None):
@@ -73,7 +86,7 @@ class ConstantVelocityFilter(BaseFilter):
     #     self.v = state[3]
 
     #TODO build this CVCT EKF (or UKF) filter
-    
+
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):
     def __init__(self, x=0, y=0, v=0, twist=0, turnRate=0, \
         stateNoise=0.5,observationNoise=10, id=None):

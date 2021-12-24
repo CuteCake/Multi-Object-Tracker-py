@@ -46,10 +46,9 @@ class SingleTracker(BaseTracker): #This is a simple Extended Kalman Filter track
 
         return self.state_estimate
 
-class MultiTracker(BaseTracker): #This is a multi-object Kalman Filter tracker
+class MultiTracker(BaseTracker):
     '''
-    This is a multi-object Kalman Filter tracker
-    observations -> [[x,y],[x,y],...]
+    A multi-object Kalman Filter tracker
 
     1. do data association (between detected objects with tracked objects)
         Method 1: GNN Global Nearest Neighbor
@@ -72,17 +71,20 @@ class MultiTracker(BaseTracker): #This is a multi-object Kalman Filter tracker
         Method 2: Use a IMM Interactive Multi-Object Kalman Filter
               It updates one object using several models then outputs a weighted sum
 
-    4. do gating:
+    4. do gating (measurement validation)
         This is mainly for JPDA
         if the measurement is not in the gate range, don't waste the computation
 
     5. retun the state_estimate
     '''
     def __init__(self, sensor_noise = 5, measurement_noise = 5, 
-        state_noise = 5, motion_model = 'constant velocity'):
+        state_noise = 5, motion_model = 'constant velocity',
+        association_method = 'GNN'):
         self.sensor_noise = sensor_noise
         self.measurement_noise = measurement_noise
         self.state_noise = state_noise
+
+        
 
         #The following are for logging purposes
         self.state_estimate = []
@@ -97,13 +99,25 @@ class MultiTracker(BaseTracker): #This is a multi-object Kalman Filter tracker
             self.motionFilter = ConstantVelocityConstantTurningRateFilter()
         else:
             raise Exception('Measurement model not supported')
-    def dataAssociation(self, observations, state_estimate):
+
+        self.association_method = association_method
+        self.tracked_objects = []
+
+    def dataAssociation(self, observations, TrackedObjects):
+        '''
+        observations -> [[x,y],[x,y],...]
+        state_estimate -> [[x,y,vx,vy],[x,y,vx,vy],...]
+        trackedObjects -> [TrackedObject,TrackedObject,...]
+        '''
+        if self.association_method == 'GNN':
+
+        else:
+            raise Exception('Association method not supported')
+
+    def trackManagement(self, observations, TrackedObjects):
         pass
 
-    def trackManagement(self, observations, state_estimate):
-        pass
-
-    def updateTracker(self, observation, dt):
+    def updateTracker(self, observation, dt,):
 
         return self.state_estimate
 
