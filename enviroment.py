@@ -60,42 +60,20 @@ class PointsEnv:
 
         self.clock = pygame.time.Clock()
 
+    def generatePoint(self,id):
+        point_a = Point(random.randrange(0,self.width), # initial x
+            random.randrange(0,self.height),            # initial y
+            random.uniform(0,2*math.pi),                # initial twist
+            (random.uniform(0,4)+30),                   # initial velocity
+            0 + random.gauss(0,10),                     # initial angular_velocity
+            id)
+        return point_a
 
     def generatePoints(self):
         for i in range(self.numPoints):
             self.points.append(self.generatePoint(i))
 
-    def generatePoint(self,id):
-        point_a = Point(random.randrange(0,self.width), # x
-            random.randrange(0,self.height), # y
-            random.uniform(0,2*math.pi), # twist
-            (random.uniform(0,4)+20), # initial velocity
-            0 + random.gauss(0,10), # initial angular_velocity
-            id)
-        return point_a
-
-    def draw(self, screen):
-        for point in self.points:
-            pygame.draw.circle(screen, (255, 255, 255), point.getXY() , self.pointSize)
-            #draw a box polygon around the point, rotate it by the point's twist
-            #and draw it on the screen
-            box = [(point.posx - self.boxSizeX, point.posy - self.boxSizeY),
-                   (point.posx + self.boxSizeX, point.posy - self.boxSizeY),
-                   (point.posx + self.boxSizeX, point.posy + self.boxSizeY),
-                   (point.posx - self.boxSizeX, point.posy + self.boxSizeY)]
-            box = np.array(box)
-
-            box = box.astype(np.int32)
-            #rotate the box using numpy, origin is the center of the box
-            box_relative = np.dot(np.array([[math.cos(point.twist), -math.sin(point.twist)],
-                                                            [math.sin(point.twist), math.cos(point.twist)]]),
-                                                            (box - box.mean(axis=0)).T )
-            box = box_relative.T + box.mean(axis=0)
-            pygame.draw.polygon(screen, (100, 255, 100), box, width=3)
-
-
-
-    def update(self):
+    def update(self): #Returns  observation
         dt = self.get_last_dt()
         for i in range(self.numPoints):
             self.points[i].update(dt)
@@ -115,14 +93,55 @@ class PointsEnv:
             observation[i,1] = (self.points[i].posy + random.gauss(0,self.observation_noise))
         return observation
 
+    def get_last_dt(self):
+        return self.clock.get_time()/1000.0
+
+    def draw(self, screen):
+        for point in self.points:
+            pygame.draw.circle(screen, (255, 255, 255), point.getXY() , self.pointSize)
+            #draw a box polygon around the point, rotate it by the point's twist
+            #and draw it on the screen
+            box = [(point.posx - self.boxSizeX, point.posy - self.boxSizeY),
+                   (point.posx + self.boxSizeX, point.posy - self.boxSizeY),
+                   (point.posx + self.boxSizeX, point.posy + self.boxSizeY),
+                   (point.posx - self.boxSizeX, point.posy + self.boxSizeY)]
+            box = np.array(box)
+
+            box = box.astype(np.int32)
+            #rotate the box using numpy, origin is the center of the box
+            box_relative = np.dot(np.array([[math.cos(point.twist), -math.sin(point.twist)],
+                                            [math.sin(point.twist), math.cos(point.twist)]]),
+                                                            (box - box.mean(axis=0)).T )
+            box = box_relative.T + box.mean(axis=0)
+            pygame.draw.polygon(screen, (100, 255, 100), box, width=3)
+
     def draw_observed_points(self,screen,obsList):
         for i in range(len(obsList)):
             pygame.draw.circle(screen, (255, 10, 105), (int(obsList[i][0]),int(obsList[i][1])), self.pointSize)
 
-    def get_last_dt(self):
-        return self.clock.get_time()/1000.0
+    def draw_prediction(self,screen,prediction):
+        # for i in range(len(prediction)):
+        posx = int(prediction[0])
+        posy = int(prediction[1])
+        twist = prediction[2]
 
-if __name__ == "__main__":
+        pygame.draw.circle(screen, (10, 10, 255), (posx,posy), self.pointSize)
+
+        box = [(posx - self.boxSizeX, posy - self.boxSizeY),
+                (posx + self.boxSizeX, posy - self.boxSizeY),
+                (posx + self.boxSizeX, posy + self.boxSizeY),
+                (posx - self.boxSizeX, posy + self.boxSizeY)]
+        box = np.array(box)
+
+        box = box.astype(np.int32)
+        #rotate the box using numpy, origin is the center of the box
+        box_relative = np.dot(np.array([[math.cos(twist), -math.sin(twist)],
+                                        [math.sin(twist), math.cos(twist)]]),
+                                                        (box - box.mean(axis=0)).T )
+        box = box_relative.T + box.mean(axis=0)
+        pygame.draw.polygon(screen, (100, 100, 255), box, width=3)
+        
+if __name__ == "__main__": #This is for testing the enviroment
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
     env = PointsEnv(640, 480, 10)

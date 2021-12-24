@@ -1,12 +1,19 @@
-import random
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-import math
 from enviroment import Point, PointsEnv
 
-class ConstantVelocityModel:
+class BaseModel: #This is a template for motion filters, should be overwritten
+    def __init__(self):
+        pass
+    def update(self, observation, dt):
+        raise NotImplementedError
+        return observation
+
+class ConstantVelocityModel(BaseModel): 
     '''
+    Constent velocity model Kalman Filter, not EKF!
     The state space is defined as:
     [x, y, vx, vy]: x,y are the position, vx,vy are the velocities
 
@@ -16,7 +23,7 @@ class ConstantVelocityModel:
     The 
     '''
     def __init__(self, x=0, y=0, vx=0, vy=0, \
-        stateNoise=1,observationNoise=10, id=None):
+        stateNoise=0.5,observationNoise=50, id=None):
         #These are the state variables:
         #This method is not as efficient as using a numpy array,
         #  but it is easier to read
@@ -44,12 +51,6 @@ class ConstantVelocityModel:
                                                 [0, 0, 0, 1]])
         return self.stateUpdateMatrix
 
-    def setState(self, state):
-        self.x = state[0]
-        self.y = state[1]
-        self.theta = state[2]
-        self.v = state[3]
-
     def update(self, observation, dt):
         '''
         observation: [x,y]
@@ -64,8 +65,12 @@ class ConstantVelocityModel:
         kalmanGain = stateCovarianceE.dot(self.observationMatrix.T).dot(np.linalg.inv(self.observationCovariance + \
             self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
         #Correct prediction
-        # kalmanGain = kalmanGain[::2]
-        print(kalmanGain)
         self.stateVector = stateE + kalmanGain.dot(np.array(observation).T - self.observationMatrix.dot(stateE))
         self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
         return self.stateVector
+
+    # def setState(self, state):
+    #     self.x = state[0]
+    #     self.y = state[1]
+    #     self.theta = state[2]
+    #     self.v = state[3]

@@ -63,5 +63,6 @@ if __name__ == "__main__":
         env.draw_observed_points(screen, observation)
         obs = np.array(observation[0])
         stateVec = tracker.updateTracker(obs, env.get_last_dt())
+        # env.draw_prediction(screen, stateVec)
         pygame.draw.circle(screen, (10,10, 255), (int(stateVec[0]),int(stateVec[1])), 5)
         pygame.display.update()
