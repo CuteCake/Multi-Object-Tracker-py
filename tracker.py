@@ -6,15 +6,12 @@ from matplotlib.animation import FuncAnimation
 import math
 import pygame
 from enviroment import Point, PointsEnv
-from motionModel import ConstantVelocityModel
+from motionModel import ConstantVelocityFilter
 
 
 class BaseTracker: #This is a simple Extended Kalman Filter tracker
     '''
-    This is a simple Extended Kalman Filter tracker
-    It uses a prediction model, and update the state space for the prediction step
-    It then generates a Kalman Gain
-    And uses the Kalman Gain to correct the prediction
+    This is a single object Kalman Filter tracker
     '''
     def __init__(self, sensor_noise = 5, measurement_noise = 5, 
         state_noise = 5, motion_model = 'constant velocity'):
@@ -31,7 +28,7 @@ class BaseTracker: #This is a simple Extended Kalman Filter tracker
 
 
         if motion_model == 'constant velocity':
-            self.motionFilter = ConstantVelocityModel()
+            self.motionFilter = ConstantVelocityFilter()
         elif motion_model == 'constant turning rate':
             raise Exception('Measurement model not supported')
             self.motionFilter = self.ConstantTurningRateMeasurementModel
@@ -39,6 +36,7 @@ class BaseTracker: #This is a simple Extended Kalman Filter tracker
             raise Exception('Measurement model not supported')
 
     def updateTracker(self, observation, dt):
+        print('dt: ', dt)
         self.state_estimate = self.motionFilter.update(observation, dt)
 
         return self.state_estimate

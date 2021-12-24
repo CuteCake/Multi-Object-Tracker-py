@@ -1,17 +1,16 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from enviroment import Point, PointsEnv
 
-class BaseModel: #This is a template for motion filters, should be overwritten
+class BaseFilter: #This is a template for motion filters, should be overwritten
     def __init__(self):
         pass
     def update(self, observation, dt):
         raise NotImplementedError
         return observation
 
-class ConstantVelocityModel(BaseModel): 
+class ConstantVelocityFilter(BaseFilter): 
     '''
     Constent velocity model Kalman Filter, not EKF!
     The state space is defined as:
@@ -23,11 +22,9 @@ class ConstantVelocityModel(BaseModel):
     The 
     '''
     def __init__(self, x=0, y=0, vx=0, vy=0, \
-        stateNoise=0.5,observationNoise=50, id=None):
-        #These are the state variables:
-        #This method is not as efficient as using a numpy array,
-        #  but it is easier to read
-        #However, whenever we output, we output as list, so we can use numpy array
+        stateNoise=0.5,observationNoise=10, id=None):
+        #state variables in Numpy array
+        #[x, y, vx, vy].T
 
         self.stateVector = np.array([x, y, vx, vy]).T #It is a column vector
         self.stateTransitionCovariance = \
@@ -74,3 +71,12 @@ class ConstantVelocityModel(BaseModel):
     #     self.y = state[1]
     #     self.theta = state[2]
     #     self.v = state[3]
+
+    class ConstantVelocityConstantTurningRateFilter(BaseFilter):
+        def __init__(self, x=0, y=0, v=0, twist=0, turnRate=0, \
+            stateNoise=0.5,observationNoise=10, id=None):
+            #These are the state variables:
+            self.stateVector = np.array([x, y, twist, v, turnRate]).T
+
+        def update(self, observation, dt):
+            return super().update(observation, dt)

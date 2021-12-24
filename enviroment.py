@@ -84,7 +84,7 @@ class PointsEnv:
                 pointID = point.pointID
                 self.points[pointID] = self.generatePoint(pointID)
         
-        self.clock.tick(60) #This limits The env to 60 frames per second by adding delay to the loop
+        self.clock.tick(60+random.randrange(-20,20)) #This limits The env to 60 frames per second by adding delay to the loop
 
         #return the observation as a 1D array
         observation = np.empty((self.numPoints,2))
