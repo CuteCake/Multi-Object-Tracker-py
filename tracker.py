@@ -22,8 +22,8 @@ class Track: #This is a class for a track, which is tracking a single object usi
     hope the garbage collector will do the job
     '''
     def __init__(self,observation = None, motion_model = 'constant_velocity', track_id=None,
-     time_to_confirm = 0.5, #time to confirm a track
-     time_to_kill = 0.5):  #time to kill a track if not recived observations
+     time_to_confirm = 0.3, #time to confirm a track
+     time_to_kill = 0.3):  #time to kill a track if not recived observations
         assert observation is not None
 
         if motion_model == 'constant_velocity': #set initial state from observation
@@ -44,12 +44,33 @@ class Track: #This is a class for a track, which is tracking a single object usi
         self.isConfirmedTrack = False
         self.time_to_kill = time_to_kill
         self.isDead = False
+        self.closest_ob = None
 
         print('Track created with id:', self.track_id)
     
     def __del__(self):
-        print('Track deleted with id:', self.track_id)
-    
+        print('Track', self.track_id, 'deleted')
+
+    def doGating(self, obs, dt, obsCov=None) -> None:
+        stateE, stateCovarianceE, ob_E = self.filter.getPrediction(dt)
+        self.gated_obs = []
+        best_dist = float('inf')
+        
+        for ob in obs:
+            distance = np.linalg.norm(ob - ob_E)
+            if distance < 20:
+                self.gated_obs.append(ob)
+                if distance < best_dist:
+                    best_dist = distance
+                    self.closest_ob = ob
+        if len(self.gated_obs) == 0:
+            self.closest_ob = None
+            self.gated_obs = None
+            # print('No valid obs in id: '+ str(self.track_id))
+
+        return self.gated_obs
+
+
     def doPredictionStep(self, dt) -> np.array:
         return self.filter.prediction(dt) #return the state vector and covariance
 
@@ -80,7 +101,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
         return self.filter.stateCovariance
 
     def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:#This is abandonded
-        raise NotImplementedError 
+        
         #Do the maintenance of the track
         #Update the timers of the track
         if observation is None:
@@ -173,7 +194,7 @@ class MultiTracker(BaseTracker):
     5. retun the state_estimate
     '''
     def __init__(self, obs = None, sensor_noise = 5, measurement_noise = 5, 
-        state_noise = 5, motion_model = 'constant velocity',
+        state_noise = 5, motion_model = 'constant_velocity',
         association_method = 'GNN'):
         self.sensor_noise = sensor_noise
         self.measurement_noise = measurement_noise
@@ -206,15 +227,41 @@ class MultiTracker(BaseTracker):
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
         #Call prediction step for every track's filter, get the new state_estimate for association
-        #1. data association and track update
+        #1. data association 
+        for track in self.tracked_objects:
+            track.doGating(observation, dt)
+        '''
         if self.association_method == 'GNN':
             self._GNN_data_association(observation, dt, obsCov=obsCov)
         else:
             raise Exception('Association method not supported')
+        
         #2. track management
         self._deleteDeadTracks()
 
-        #3. gating
+        #3. track update
+        for track in self.tracked_objects:
+            track.doCorrectionStep(observation, dt, obsCov) #TODO
+        '''
+
+        #Test:
+        for track in self.tracked_objects:
+            track.doPredictionStep(dt)
+            if track.closest_ob is not None:
+                track.doCorrectionStep(track.closest_ob)
+            track.doMaintenance(dt=dt, observation=track.closest_ob)
+
+        for ob in observation:
+            notAssociated = True
+            for track in self.tracked_objects:
+                if np.array_equal(ob,  track.closest_ob):
+                    notAssociated = False
+                    break
+            if notAssociated:
+                self._createTrack(ob)
+
+
+        self._deleteDeadTracks()
         return self.tracked_objects
 
     def _createTrack(self, observation):
@@ -295,23 +342,45 @@ class MultiTracker(BaseTracker):
 
 
 if __name__ == "__main__":
+    # pygame.init()
+    # screen = pygame.display.set_mode((640, 480))
+    # env = PointsEnv(640, 480, 10)
+    # tracker = SingleTracker()
+    # while True:
+    #     for event in pygame.event.get():
+    #         if event.type == pygame.QUIT:
+    #             print(env.get_time_elapsed())
+    #             pygame.quit()
+    #             quit()
+    #     screen.fill((0, 0, 0))
+    #     env.draw(screen)
+    #     observation = env.update()
+    #     env.draw_observed_points(screen, observation)
+        
+    #     obs = np.array(observation[0])
+    #     stateVec = tracker.updateTracker(obs, env.get_last_dt())
+    #     # env.draw_prediction(screen, stateVec)
+    #     pygame.draw.circle(screen, (10,10, 255), (int(stateVec[0]),int(stateVec[1])), 5)
+    #     pygame.display.update()
+
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
     env = PointsEnv(640, 480, 10)
-    tracker = SingleTracker()
+    observation = env.update()
+    tracker = MultiTracker(obs=observation)
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print(env.get_time_elapsed())
                 pygame.quit()
                 quit()
         screen.fill((0, 0, 0))
         env.draw(screen)
         observation = env.update()
-        
         env.draw_observed_points(screen, observation)
-        obs = np.array(observation[0])
-        stateVec = tracker.updateTracker(obs, env.get_last_dt())
+        
+        obs = np.array(observation)
+        objects = tracker.updateTracker(obs, env.get_last_dt())
         # env.draw_prediction(screen, stateVec)
-        pygame.draw.circle(screen, (10,10, 255), (int(stateVec[0]),int(stateVec[1])), 5)
+        for object in objects:
+            pygame.draw.circle(screen, (10,10, 255), (int(object.getState()[0]),int(object.getState()[1])), 5)
         pygame.display.update()

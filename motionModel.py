@@ -124,6 +124,20 @@ class ConstantVelocityFilter(BaseFilter):
         self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
         return self.stateVector
 
+    def getPrediction(self, dt):
+        '''
+        getPrediction step but don't change the state vector and the covariance matrix!
+        '''
+        #Prediction step
+        stateUpdateMatrix = self.getStateUpdateMatrix(dt)
+        stateE = stateUpdateMatrix.dot(self.stateVector)
+        stateCovarianceE = stateUpdateMatrix.dot(self.stateCovariance).dot(stateUpdateMatrix.T) + \
+            self.stateTransitionCovariance
+
+        obsE = self.observationMatrix.dot(stateE)
+
+        return stateE, stateCovarianceE, obsE
+
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):
     '''
     To C.K. :
@@ -152,6 +166,20 @@ class ConstantVelocityConstantTurningRateFilter(BaseFilter):
         stateNoise=0.5,observationNoise=10, id=None):
         #These are the state variables:
         self.stateVector = np.array([x, y, twist, v, turnRate]).T
+
+    def stateTransition(self, stateVector, dt):
+        '''
+        stateTransition
+        '''
+        pass
+        return stateVector
+
+    def measurementFunction(self, stateVector):
+        '''
+        measurementFunction
+        '''
+        pass
+        return predictedObservation
 
     def update(self, observation, dt):
         return super().update(observation, dt)
