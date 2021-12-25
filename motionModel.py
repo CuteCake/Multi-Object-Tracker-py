@@ -54,10 +54,10 @@ class ConstantVelocityFilter(BaseFilter):
         self.id = id
 
     def getStateUpdateMatrix(self, dt): #Get state estimation but don't update
-        self.stateUpdateMatrix = np.array([[1, 0, dt, 0], \
-                                             [0, 1, 0, dt], \
-                                                [0, 0, 1, 0], \
-                                                [0, 0, 0, 1]])
+        self.stateUpdateMatrix = np.array([ [1, 0, dt, 0], \
+                                            [0, 1, 0, dt], \
+                                            [0, 0, 1, 0], \
+                                            [0, 0, 0, 1]])
         return self.stateUpdateMatrix
 
 
@@ -172,7 +172,7 @@ class ConstantVelocityConstantTurningRateFilter(BaseFilter):
         stateTransition
         '''
         pass
-        return stateVector
+        return stateVectorE
 
     def measurementFunction(self, stateVector):
         '''

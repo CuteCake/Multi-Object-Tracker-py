@@ -113,7 +113,7 @@ class PointsEnv:
                                             [math.sin(point.twist), math.cos(point.twist)]]),
                                                             (box - box.mean(axis=0)).T )
             box = box_relative.T + box.mean(axis=0)
-            pygame.draw.polygon(screen, (100, 255, 100), box, width=3)
+            pygame.draw.polygon(screen, (50, 200, 50), box, width=3)
 
     def draw_observed_points(self,screen,obsList):
         for i in range(len(obsList)):

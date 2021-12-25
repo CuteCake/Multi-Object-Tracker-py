@@ -37,6 +37,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
         else:
             raise NotImplementedError
         
+        self.color = (random.randint(0,255),random.randint(0,255),random.randint(0,255))
         self.track_id = track_id
         self.time_recived_observations = 0
         self.time_not_recived_observations = 0
@@ -382,5 +383,5 @@ if __name__ == "__main__":
         objects = tracker.updateTracker(obs, env.get_last_dt())
         # env.draw_prediction(screen, stateVec)
         for object in objects:
-            pygame.draw.circle(screen, (10,10, 255), (int(object.getState()[0]),int(object.getState()[1])), 5)
+            pygame.draw.circle(screen, object.color, (int(object.getState()[0]),int(object.getState()[1])), 4)
         pygame.display.update()
