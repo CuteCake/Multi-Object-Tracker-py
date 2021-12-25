@@ -5,8 +5,7 @@ from enviroment import Point, PointsEnv
 
 class BaseFilter: #This is a template for motion filters, should be overwritten
     def __init__(self):
-        self.track_id = None
-        self.isConfirmedTrack = False
+        pass
         
     def update(self, observation, dt):
         raise NotImplementedError
@@ -61,7 +60,9 @@ class ConstantVelocityFilter(BaseFilter):
                                                 [0, 0, 0, 1]])
         return self.stateUpdateMatrix
 
-    def update(self, observation, dt):
+    def update(self, observation,  dt, observationCovariance=None, doDeadReckoning=False):
+        if observationCovariance is not None:
+            self.observationCovariance = observationCovariance
         '''
         observation: [x,y]
         dt: time since last update
@@ -71,6 +72,11 @@ class ConstantVelocityFilter(BaseFilter):
         stateE = stateUpdateMatrix.dot(self.stateVector)
         stateCovarianceE = stateUpdateMatrix.dot(self.stateCovariance).dot(stateUpdateMatrix.T) + \
             self.stateTransitionCovariance
+        #If we don't have a measurement, immediately return the prediction
+        if doDeadReckoning:
+            self.stateVector = stateE
+            self.stateCovariance = stateCovarianceE
+            return self.stateVector
         #Generate Kalman Gain
         kalmanGain = stateCovarianceE.dot(self.observationMatrix.T).dot(np.linalg.inv(self.observationCovariance + \
             self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
