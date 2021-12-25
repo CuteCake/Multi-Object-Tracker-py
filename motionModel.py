@@ -60,7 +60,8 @@ class ConstantVelocityFilter(BaseFilter):
                                                 [0, 0, 0, 1]])
         return self.stateUpdateMatrix
 
-    def update(self, observation,  dt, observationCovariance=None, doDeadReckoning=False):
+
+    def update(self, observation,  dt, observationCovariance=None ):
         if observationCovariance is not None:
             self.observationCovariance = observationCovariance
         '''
@@ -72,11 +73,6 @@ class ConstantVelocityFilter(BaseFilter):
         stateE = stateUpdateMatrix.dot(self.stateVector)
         stateCovarianceE = stateUpdateMatrix.dot(self.stateCovariance).dot(stateUpdateMatrix.T) + \
             self.stateTransitionCovariance
-        #If we don't have a measurement, immediately return the prediction
-        if doDeadReckoning:
-            self.stateVector = stateE
-            self.stateCovariance = stateCovarianceE
-            return self.stateVector
         #Generate Kalman Gain
         kalmanGain = stateCovarianceE.dot(self.observationMatrix.T).dot(np.linalg.inv(self.observationCovariance + \
             self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
@@ -85,13 +81,48 @@ class ConstantVelocityFilter(BaseFilter):
         self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
         return self.stateVector
 
-    # def setState(self, state):
-    #     self.x = state[0]
-    #     self.y = state[1]
-    #     self.theta = state[2]
-    #     self.v = state[3]
+    def prediction(self, dt):
+        '''
+        prediction step
+        Why split up? for multi object tracking, because sometimes
+        we don't get an observation, we will not call the correction(), 
+        but we still need to predict
 
-    #TODO build this CVCT EKF (or UKF) filter
+        This step changes the state vector and the covariance matrix!
+
+        so calling prediction() and correction() in a row 
+        will give the same result as calling update()
+        '''
+        #Prediction step
+        stateUpdateMatrix = self.getStateUpdateMatrix(dt)
+        stateE = stateUpdateMatrix.dot(self.stateVector)
+        stateCovarianceE = stateUpdateMatrix.dot(self.stateCovariance).dot(stateUpdateMatrix.T) + \
+            self.stateTransitionCovariance
+
+        self.stateVector = stateE
+        self.stateCovariance = stateCovarianceE
+
+        predictedObservation = self.observationMatrix.dot(self.stateVector)
+
+        return self.stateVector, self.stateCovariance, predictedObservation
+
+    def correction(self, observation, observationCovariance=None):
+        '''
+        correction step
+        Why split up? for multi object tracking!
+        '''
+        if observationCovariance is not None:
+            self.observationCovariance = observationCovariance
+        #get back the estimation
+        stateCovarianceE = self.stateCovariance
+        stateE= self.stateVector
+        #Generate Kalman Gain
+        kalmanGain = stateCovarianceE.dot(self.observationMatrix.T).dot(np.linalg.inv(self.observationCovariance + \
+            self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
+        #Correct prediction
+        self.stateVector = stateE + kalmanGain.dot(np.array(observation).T - self.observationMatrix.dot(stateE))
+        self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
+        return self.stateVector
 
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):
     '''

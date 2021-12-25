@@ -8,6 +8,8 @@ import pygame
 from enviroment import Point, PointsEnv
 from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter
 
+from itertools import permutations
+
 
 class Track: #This is a class for a track, which is tracking a single object using some filter
     '''
@@ -42,13 +44,44 @@ class Track: #This is a class for a track, which is tracking a single object usi
         self.isConfirmedTrack = False
         self.time_to_kill = time_to_kill
         self.isDead = False
+
         print('Track created with id:', self.track_id)
     
     def __del__(self):
         print('Track deleted with id:', self.track_id)
     
-    def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:
-        #Do the maintainance of the track
+    def doPredictionStep(self, dt) -> np.array:
+        return self.filter.prediction(dt) #return the state vector and covariance
+
+    def doCorrectionStep(self, observation, obsCov=None) -> None:
+        stateVector = self.filter.correction(observation, observationCovariance=obsCov)
+        return stateVector
+
+    def doMaintenance(self, dt = None, observation = None) -> None:
+        assert dt is not None
+
+        if observation is None:
+            self.time_not_recived_observations += dt
+            self.time_recived_observations = 0
+        else:
+            self.time_recived_observations += dt
+            self.time_not_recived_observations = 0
+
+        #Update the status of the track
+        if self.time_recived_observations > self.time_to_confirm:
+            self.isConfirmedTrack = True
+        if self.time_not_recived_observations > self.time_to_kill:
+            self.isDead = True
+
+    def getState(self) -> np.array:
+        return self.filter.stateVector
+
+    def getStateCovariance(self) -> np.array:
+        return self.filter.stateCovariance
+
+    def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:#This is abandonded
+        raise NotImplementedError 
+        #Do the maintenance of the track
         #Update the timers of the track
         if observation is None:
             doDeadReckoning = True
@@ -68,14 +101,6 @@ class Track: #This is a class for a track, which is tracking a single object usi
         stateVector = self.filter.update(observation, dt, observationCovariance=obsCov, doDeadReckoning=doDeadReckoning)
         return stateVector
 
-    def getState(self) -> np.array:
-        return self.filter.stateVector
-
-    def getStateCovariance(self) -> np.array:
-        return self.filter.stateCovariance
-
-
-        
 class BaseTracker: #Base class for tracker, should be inherited (and overwritten by real tracker)
     def __init__(self) -> None:
         pass
@@ -147,7 +172,7 @@ class MultiTracker(BaseTracker):
 
     5. retun the state_estimate
     '''
-    def __init__(self, sensor_noise = 5, measurement_noise = 5, 
+    def __init__(self, obs = None, sensor_noise = 5, measurement_noise = 5, 
         state_noise = 5, motion_model = 'constant velocity',
         association_method = 'GNN'):
         self.sensor_noise = sensor_noise
@@ -163,32 +188,36 @@ class MultiTracker(BaseTracker):
 
         self.motion_model = motion_model
         self.association_method = association_method
-        self.tracked_objects = [] #the list for tracks
+        self.tracked_objects = [] #the list for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
+
+        #Initialize trackers
+        assert obs is not None
+        assert len(obs) > 1
+        for i in range(len(obs)):
+            self._createTrack(obs[i])
+
         
-    def step(self, observation, dt):
+    def updateTracker(self, observation, dt, obsCov=None):
         
         '''
         observations -> [[x,y],[x,y],...]
         state_estimate -> [[x,y,vx,vy],[x,y,vx,vy],...]
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
-        self.obsrvation = observation
-        self.dt = dt
-        #1. data association
+        #Call prediction step for every track's filter, get the new state_estimate for association
+        #1. data association and track update
         if self.association_method == 'GNN':
-            self.GNN_data_association()
+            self._GNN_data_association(observation, dt, obsCov=obsCov)
         else:
             raise Exception('Association method not supported')
         #2. track management
-        
+        self._deleteDeadTracks()
 
-        #3. update tracker
-
-        #4. gating
+        #3. gating
         return self.tracked_objects
 
-    def createTrack(self, observation):
+    def _createTrack(self, observation):
         '''
         Create a new track for the observation
         '''
@@ -198,7 +227,7 @@ class MultiTracker(BaseTracker):
         
         return self.next_track_id
 
-    def deleteDeadTracks(self):
+    def _deleteDeadTracks(self):
         '''
         Delete a track
         '''
@@ -209,21 +238,37 @@ class MultiTracker(BaseTracker):
                 #potential bug: the index of the list will be changed??
         return
 
-    def GNN_data_association(self):
+    def _GNN_data_association(self, obs, obs_predicted, track_ids, obsCov=None):
         '''
         Data association using GNN
 
-        return: association_matrix:
-        [[obsvertion_id, track_id],
-         [...],
-         [...],]
-        '''
-        #1. calculate Mahalanobis distance
+        we get every observation a track, 
+        if an existing track is not found,
+        we create a new track for it
 
-        #2. find the closest track
-        #3. associate the observation to the closest track
-        #4. update the track
-        pass
+        observation -> [[x,y],[x,y],...]
+
+        return:
+            association list -> [track_id, track_id,...]
+             the length of the list is the number of observations
+
+        '''
+        #calculate euclidean distance, TODO use Mahalanobis distance
+        min_sum_dist = np.inf
+        permut = permutations(list(range(len(obs))),list(range(len(obs_predicted))))
+        for combination in permut:
+            sum_dist = 0
+            #calculate the sum of euclidean distance
+            for i in range(len(combination)):
+                sum_dist += np.linalg.norm(obs[combination[i][0]]-obs_predicted[combination[i][1]])
+            #check if the sum of distance is better
+            if sum_dist < min_sum_dist:
+                min_sum_dist = sum_dist
+                best_comnination = combination
+        return best_comnination[track_ids]
+
+    def _JPDA_data_association(self, observation, dt, obsCov=None):
+        raise NotImplementedError
 
     # def dataAssociation(self, observations, TrackedObjects):
     #     '''
