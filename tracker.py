@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import math
 import pygame
+from pygame.math import disable_swizzling
 from enviroment import Point, PointsEnv
 from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter
 
-from itertools import permutations
+from itertools import permutations, product
 
 
 class Track: #This is a class for a track, which is tracking a single object using some filter
@@ -22,8 +23,8 @@ class Track: #This is a class for a track, which is tracking a single object usi
     hope the garbage collector will do the job
     '''
     def __init__(self,observation = None, motion_model = 'constant_velocity', track_id=None,
-     time_to_confirm = 0.3, #time to confirm a track
-     time_to_kill = 0.3):  #time to kill a track if not recived observations
+     time_to_confirm = 0.2, #time to confirm a track
+     time_to_kill = 0.2):  #time to kill a track if not recived observations
         assert observation is not None
 
         if motion_model == 'constant_velocity': #set initial state from observation
@@ -56,6 +57,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
 
     def doGating(self, obs, dt, obsCov=None) -> None:
         stateE, stateCovarianceE, ob_E = self.filter.getPrediction(dt)
+        self.ob_E = ob_E
         self.gated_obs = []
         best_dist = float('inf')
         
@@ -75,6 +77,18 @@ class Track: #This is a class for a track, which is tracking a single object usi
 
         return self.gated_obs
 
+    def isInGate(self, obs, dt, obsCov=None) -> bool:
+        '''
+        Check if the observation is in the gate
+        '''
+        
+        distance = self._euclidean_distance(obs, self.ob_E)
+        if distance < 20:
+            valid = True
+        else:
+            valid = False
+        print('Distance: ', distance)
+        return valid, distance
 
     def doPredictionStep(self, dt) -> np.array:
         return self.filter.prediction(dt) #return the state vector and covariance
@@ -270,26 +284,29 @@ class MultiTracker(BaseTracker):
         for track in self.tracked_objects:
             track.doCorrectionStep(observation, dt, obsCov) #TODO
         '''
+        track_ids_assod, obs_assod, obs_not_assod = self._GNN_data_association(observations, self.tracked_objects_dict, dt)
 
-        #Test:
         for track in self.tracked_objects_dict.values():
             track.doPredictionStep(dt)
-            if track.closest_ob is not None:
-                track.doCorrectionStep(track.closest_ob)
-            track.doMaintenance(dt=dt, observation=track.closest_ob)
 
-        for ob in observations:
-            notAssociated = True
-            for track in self.tracked_objects_dict.values():
-                if np.array_equal(ob,  track.closest_ob):
-                    notAssociated = False
-                    break
-            if notAssociated:
-                self._createTrack(ob)
+        for track_id, ob in zip(track_ids_assod, obs_assod):
+            self.tracked_objects_dict[track_id].doCorrectionStep(ob)
+            self.tracked_objects_dict[track_id].doMaintenance(dt=dt, observation=ob)
 
+        for id in self.tracked_objects_dict.keys():
+            if id not in track_ids_assod:
+                self.tracked_objects_dict[id].doMaintenance(dt=dt, observation=None)
+
+        for ob in obs_not_assod:
+            self._createTrack(ob)
 
         self._deleteDeadTracks()
-        return self.tracked_objects_dict
+
+        self.validTracks = {}
+        for track in self.tracked_objects_dict.values():
+            if track.isConfirmedTrack:
+                self.validTracks[track.track_id] = track
+        return self.validTracks
 
     def _createTrack(self, observation):
         '''
@@ -322,52 +339,97 @@ class MultiTracker(BaseTracker):
 
         return
 
-    def _GNN_data_association(self, obs, obs_predicted, track_ids, obsCov=None):
+    def _GNN_data_association(self, obs, track_dict, dt, obsCov=None):
         '''
-        Data association using GNN
+        Data association using Global Nearest Neighbor
 
-        we get every observation a track, 
-        if an existing track is not found,
-        we create a new track for it
-
-        observation -> [[x,y],[x,y],...]
+        input:
+            track_dict: {track_id: Track}
+            observation -> [[x,y],[x,y],...]
 
         return:
-            association list -> [track_id, track_id,...]
-             the length of the list is the number of observations
+            associated_tracks -> [track_id, track_id,...]
+            associated_observations -> [observation, observation,...] , The same order as associated_tracks
+
+            not_associated_observations -> [observation, observation,...]
 
         '''
-        #This is a brute force method: going through every possible association,
-        #Check is the combination is valid, if yes, 
-        #calculate euclidean distance, TODO use Mahalanobis distance
-        #And then add to the list
-        min_sum_dist = np.inf
-        permut = permutations(list(range(len(obs))),list(range(len(obs_predicted))))
-        for combination in permut:
-            sum_dist = 0
-            #calculate the sum of euclidean distance
-            gate_checking = False
-            for i in range(len(combination)):
-                pass
-            #check if the sum of distance is better
-            if sum_dist < min_sum_dist:
-                min_sum_dist = sum_dist
-                best_comnination = combination
-
         #Calculate the num_tracks by num_observations cost matrix
-        # num_tracks = len(obs)
-        # num_observations = len(obs_predicted)
-        # cost_matrix = np.zeros((num_tracks, num_observations))
-        # for i in range(num_tracks):
-        #     for j in range(num_observations):
-        #         cost_matrix[i,j] = np.linalg.norm(obs[i]-obs_predicted[j])
-        # use kuhn munkres algorithm to find the best association
+        track_id_list = list(track_dict.keys()) #track_id_list = [1,9,3,...]
+        track_id_list.sort()
+        cost_matrix = np.zeros((len(track_id_list), len(obs))) #(num_tracks, num_observations)
+        for i in range(len(track_id_list)):
+            for j in range(len(obs)):
+                cost_matrix[i,j] = np.linalg.norm(obs[j]-track_dict[track_id_list[i]].ob_E)
+
+        #Find the best association
+        row_ind, col_ind = self._kuhn_munkres(cost_matrix)
+        track_ind = list(row_ind) #the index in the track_id_list
+        obs_ind = list(col_ind)   #the index in the obs
+
+        # Transform the indices back into a list of track_id and a list of obs ids
+        # Also, only add if it passes the gating check
+        associated_track_ids = []
+        associated_obs_ids = []
+
+        for track_i, obs_i in zip(track_ind, obs_ind):
+            cost = cost_matrix[track_i, obs_i]
+
+            if cost < 50:
+                associated_track_ids.append(track_id_list[track_i])
+                associated_obs_ids.append(obs_i)
+                # assert np.linalg.norm(obs[obs_i]-track_dict[track_id_list[track_i]].ob_E) < 20
+                # print('track_id: ', track_i, 'dist: ', np.linalg.norm(obs[obs_i]-track_dict[track_id_list[track_i]].ob_E))
+        
+        # Turn obs_ind into a list of acturall observations
+        associated_obs = []
+        for obs_id in associated_obs_ids:
+            associated_obs.append(obs[obs_id])
+
+        #Last, lets get the obs which are not associated, so we can create new tracks for them
+        not_associated_obs = []
+        for i, ob in enumerate(obs):
+            if i not in associated_obs_ids:
+                not_associated_obs.append(ob)
+                
+        # print('not_associated_obs: ', len(not_associated_obs))
+        assert len(associated_track_ids) == len(associated_obs)
+        assert len(not_associated_obs) == len(obs) - len(associated_obs)
+        # print('finish data association')
+        # for id ,ob in zip(associated_track_ids, associated_obs):
+        #     print('track_id: ', id, 'obs: ', ob, 'dist: ', np.linalg.norm(ob-track_dict[id].ob_E))
+
+        return associated_track_ids, associated_obs, not_associated_obs
 
 
-        return best_comnination[track_ids]
+        # print('row_ind: ', row_ind)
+        # print('col_ind: ', col_ind)
+        # min_sum_dist = np.inf
+        
+        # permut = permutations(list(range(len(obs))),len(track_id_list))
+        # best_comnination = None
+        # for combination in permut:
+        #     zipped = zip(combination, track_id_list)
+        #     sum_dist = 0
+        #     #calculate the sum of euclidean distance
+        #     valid = True
+        #     for pair in zipped:
+        #         # print('pair: ', pair)
+        #         valid, dist = track_dict[pair[1]].isInGate(obs[pair[0]],dt)
+        #         if not valid:
+        #             valid = False
+        #         sum_dist += dist
+        #     #check if the sum of distance is better
+        #     if sum_dist < min_sum_dist and valid:
+        #         min_sum_dist = sum_dist
+        #         best_comnination = combination
+
+
 
     def _kuhn_munkres(self, cost_matrix):
-        pass #TODO
+        import scipy.optimize as op
+        row_ind, col_ind = op.linear_sum_assignment(cost_matrix)
+        return row_ind, col_ind
 
     def _JPDA_data_association(self, observation, dt, obsCov=None):
         raise NotImplementedError
@@ -457,13 +519,14 @@ if __name__ == "__main__":
         observation = env.update()
         env.draw_observed_points(screen, observation)
         obs = np.array(observation)
-        # start_time = time.time()
+        start_time = time.time()
 
         # The call to update tracker, input is a 2D array of observation, 
         # and the output is a array of Track objects
         objects_dict = tracker.updateTracker(obs, env.get_last_dt())
         # print('fps:', 1/(time.time()-start_time))
         # env.draw_prediction(screen, stateVec)
+        # print('sum of track id: ', len(objects_dict.keys()))
         for object in objects_dict.values():
             pygame.draw.circle(screen, object.color, (int(object.getState()[0]),int(object.getState()[1])), 4)
         pygame.display.update()

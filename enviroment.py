@@ -91,6 +91,12 @@ class PointsEnv:
         for i in range(len(self.points)):
             observation[i,0] = (self.points[i].posx + random.gauss(0,self.observation_noise))
             observation[i,1] = (self.points[i].posy + random.gauss(0,self.observation_noise))
+        #delete an obervation randomly
+        if random.random() < 0.9:
+            observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
+        # add random noise to the observation
+        noise = np.array([[random.randint(0,self.width),random.randint(0,self.height)]])
+        observation = np.concatenate((observation,noise),axis=0)
         return observation
 
     def get_last_dt(self):
