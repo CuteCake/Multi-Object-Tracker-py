@@ -38,6 +38,8 @@ class Track: #This is a class for a track, which is tracking a single object usi
             raise NotImplementedError
         
         self.color = (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+
+        #The following part is for track maintaince
         self.track_id = track_id
         self.time_recived_observations = 0
         self.time_not_recived_observations = 0
@@ -58,7 +60,9 @@ class Track: #This is a class for a track, which is tracking a single object usi
         best_dist = float('inf')
         
         for ob in obs:
-            distance = np.linalg.norm(ob - ob_E)
+            ob = ob
+            distance = self._euclidean_distance(ob, ob_E)
+            # distance = self._mahalanobis_distance(ob, ob_E, obsCov)
             if distance < 20:
                 self.gated_obs.append(ob)
                 if distance < best_dist:
@@ -100,6 +104,24 @@ class Track: #This is a class for a track, which is tracking a single object usi
 
     def getStateCovariance(self) -> np.array:
         return self.filter.stateCovariance
+
+    def _euclidean_distance(self, obs, obs_predicted):
+        '''
+        Calculate the euclidean distance between observation and predicted observation
+        Lets assume the observation is a vector, and the predicted observation is a vector
+        '''
+        D = np.linalg.norm(obs-obs_predicted)
+
+        return D
+
+    def _mahalanobis_distance(self, obs, obs_predicted, obsPCov):
+        '''
+        Calculate the Mahalanobis distance between observation and predicted observation
+        Lets assume the observation is a vector, and the predicted observation is a vector
+        '''
+        D = math.sqrt((obs-obs_predicted).T.dot(np.linalg.inv(obsPCov)).dot(obs-obs_predicted))
+
+        return D
 
     def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:#This is abandonded
         
@@ -210,7 +232,8 @@ class MultiTracker(BaseTracker):
 
         self.motion_model = motion_model
         self.association_method = association_method
-        self.tracked_objects = [] #the list for tracks, including confirmed and tentative tracks
+        # self.tracked_objects = [] #the list for tracks, including confirmed and tentative tracks
+        self.tracked_objects_dict = {} #the dict for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
 
         #Initialize trackers
@@ -220,17 +243,20 @@ class MultiTracker(BaseTracker):
             self._createTrack(obs[i])
 
         
-    def updateTracker(self, observation, dt, obsCov=None):
+    def updateTracker(self, observations, dt, obsCov=None):
         
         '''
-        observations -> [[x,y],[x,y],...]
+        observations -> [[x,y],[x,y],...] is a 2D array
         state_estimate -> [[x,y,vx,vy],[x,y,vx,vy],...]
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
+
+        #Do gating before association
         #Call prediction step for every track's filter, get the new state_estimate for association
         #1. data association 
-        for track in self.tracked_objects:
-            track.doGating(observation, dt)
+
+        for track in self.tracked_objects_dict.values():
+            track.doGating(observations, dt)
         '''
         if self.association_method == 'GNN':
             self._GNN_data_association(observation, dt, obsCov=obsCov)
@@ -246,15 +272,15 @@ class MultiTracker(BaseTracker):
         '''
 
         #Test:
-        for track in self.tracked_objects:
+        for track in self.tracked_objects_dict.values():
             track.doPredictionStep(dt)
             if track.closest_ob is not None:
                 track.doCorrectionStep(track.closest_ob)
             track.doMaintenance(dt=dt, observation=track.closest_ob)
 
-        for ob in observation:
+        for ob in observations:
             notAssociated = True
-            for track in self.tracked_objects:
+            for track in self.tracked_objects_dict.values():
                 if np.array_equal(ob,  track.closest_ob):
                     notAssociated = False
                     break
@@ -263,27 +289,37 @@ class MultiTracker(BaseTracker):
 
 
         self._deleteDeadTracks()
-        return self.tracked_objects
+        return self.tracked_objects_dict
 
     def _createTrack(self, observation):
         '''
         Create a new track for the observation
         '''
         self.next_track_id += 1
-        self.tracked_objects.append(Track(observation = observation, \
-            motion_model=self.motion_model, track_id=self.next_track_id))
-        
+        # self.tracked_objects.append(Track(observation = observation, \
+        #     motion_model=self.motion_model, track_id=self.next_track_id))
+        self.tracked_objects_dict[self.next_track_id] = Track(observation = observation, \
+            motion_model=self.motion_model, track_id=self.next_track_id)
         return self.next_track_id
 
     def _deleteDeadTracks(self):
         '''
         Delete a track
         '''
-        for index, track in enumerate(self.tracked_objects):
+        # for index, track in enumerate(self.tracked_objects):
+        #     if track.isDead:
+        #         self.tracked_objects.pop(index) #delete the track from the list, 
+        #         #and the track will be deleted automatically
+        #         #potential bug: the index of the list will be changed??
+
+         #Method 2: using the dict:
+        id_to_delete = []
+        for id,track in self.tracked_objects_dict.items():
             if track.isDead:
-                self.tracked_objects.pop(index) #delete the track from the list, 
-                #and the track will be deleted automatically
-                #potential bug: the index of the list will be changed??
+                id_to_delete.append(id)
+        for id in id_to_delete:
+            self.tracked_objects_dict.pop(id)
+
         return
 
     def _GNN_data_association(self, obs, obs_predicted, track_ids, obsCov=None):
@@ -301,22 +337,62 @@ class MultiTracker(BaseTracker):
              the length of the list is the number of observations
 
         '''
+        #This is a brute force method: going through every possible association,
+        #Check is the combination is valid, if yes, 
         #calculate euclidean distance, TODO use Mahalanobis distance
+        #And then add to the list
         min_sum_dist = np.inf
         permut = permutations(list(range(len(obs))),list(range(len(obs_predicted))))
         for combination in permut:
             sum_dist = 0
             #calculate the sum of euclidean distance
+            gate_checking = False
             for i in range(len(combination)):
-                sum_dist += np.linalg.norm(obs[combination[i][0]]-obs_predicted[combination[i][1]])
+                pass
             #check if the sum of distance is better
             if sum_dist < min_sum_dist:
                 min_sum_dist = sum_dist
                 best_comnination = combination
+
+        #Calculate the num_tracks by num_observations cost matrix
+        # num_tracks = len(obs)
+        # num_observations = len(obs_predicted)
+        # cost_matrix = np.zeros((num_tracks, num_observations))
+        # for i in range(num_tracks):
+        #     for j in range(num_observations):
+        #         cost_matrix[i,j] = np.linalg.norm(obs[i]-obs_predicted[j])
+        # use kuhn munkres algorithm to find the best association
+
+
         return best_comnination[track_ids]
+
+    def _kuhn_munkres(self, cost_matrix):
+        pass #TODO
 
     def _JPDA_data_association(self, observation, dt, obsCov=None):
         raise NotImplementedError
+
+    def _mahalanobis_distance(self, obs, obs_predicted, obsPCov):
+        '''
+        Calculate the Mahalanobis distance between observation and predicted observation
+
+        Lets assume the observation is a vector, and the predicted observation is a vector
+        '''
+        D = math.sqrt((obs-obs_predicted).T.dot(np.linalg.inv(obsPCov)).dot(obs-obs_predicted))
+
+        return D
+    
+    def _2D_mahalannobis_threshold_from_probability(self, prob, Dim):
+        '''
+        Calculate the threshold for Mahalanobis distance from probability 
+        that observation is valid
+        '''
+
+        T = math.sqrt(-2*math.log(1-prob)) #only valid for Dim = 2
+
+        return T
+
+
 
     # def dataAssociation(self, observations, TrackedObjects):
     #     '''
@@ -363,6 +439,8 @@ if __name__ == "__main__":
     #     # env.draw_prediction(screen, stateVec)
     #     pygame.draw.circle(screen, (10,10, 255), (int(stateVec[0]),int(stateVec[1])), 5)
     #     pygame.display.update()
+    
+    import time
 
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
@@ -378,10 +456,14 @@ if __name__ == "__main__":
         env.draw(screen)
         observation = env.update()
         env.draw_observed_points(screen, observation)
-        
         obs = np.array(observation)
-        objects = tracker.updateTracker(obs, env.get_last_dt())
+        # start_time = time.time()
+
+        # The call to update tracker, input is a 2D array of observation, 
+        # and the output is a array of Track objects
+        objects_dict = tracker.updateTracker(obs, env.get_last_dt())
+        # print('fps:', 1/(time.time()-start_time))
         # env.draw_prediction(screen, stateVec)
-        for object in objects:
+        for object in objects_dict.values():
             pygame.draw.circle(screen, object.color, (int(object.getState()[0]),int(object.getState()[1])), 4)
         pygame.display.update()
