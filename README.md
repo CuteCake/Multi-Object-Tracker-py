@@ -1,14 +1,13 @@
-# Multi object tracking test platform
-### An Multi object tracking agrithm in python
+# Multi object tracking
+### A multi object tracking agrithm in python
 The kalman filter is in motionModels.py.
 The tracker is in tracker.py, 
-### An enviroment that generates a bunch of random points 
-which can move around and appering and reappearing
-in the window.
+### An enviroment that generates a bunch of points 
+Points are generated using constant velocity constant turning model.
 
-This enviroment can deal with non stable update frequency, look at self.clock.tick()
-This enviroment also deals with dropping observation and adding random noise to the observation.
-This enviroment also deals with adding random false positive observation.
+This enviroment can generate non-stable update frequency, look at self.clock.tick()
+This enviroment can generate dropping observation and adding random noise to the observation.
+This enviroment can generate random false positive observation.
 
 It also outputs the visualization of the enviroment using a pygame window
 

@@ -36,7 +36,8 @@ class Point:
     def update(self,dt): #This is a constant velocity, constant turning rate model, this update is for ground truth generation
         self.posx += self.velocity*dt*math.cos(self.twist)
         self.posy += self.velocity*dt*math.sin(self.twist)
-        self.angular_velocity = random.gauss(0,0.5)
+        self.angular_velocity += random.gauss(0,0.5)
+        self.angular_velocity -= self.angular_velocity*0.1
         self.twist += self.angular_velocity*dt
         self.twist = self.twist%(2*math.pi)
         self.velocity += random.gauss(0,2)
@@ -68,7 +69,7 @@ class PointsEnv:
             random.randrange(0,self.height),            # initial y
             random.uniform(0,2*math.pi),                # initial twist
             (random.uniform(0,10)+40),                   # initial velocity
-            0 + random.gauss(0,10),                     # initial angular_velocity
+            0 + random.gauss(0,1),                     # initial angular_velocity
             id)
         return point_a
 

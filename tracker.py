@@ -388,7 +388,7 @@ class MultiTracker(BaseTracker):
         '''
         #1. Calculate the num_tracks by num_observations cost matrix
         track_id_list = list(track_dict.keys()) #track_id_list = [1,9,3,...]
-        track_id_list.sort() #sort track id to reduce the chance of duplicate tracks for the same observation
+        track_id_list.sort() #sort track id to reduce the chance of duplicate tracks
         cost_matrix = np.zeros((len(track_id_list), len(obs))) #(num_tracks, num_observations)
         for i in range(len(track_id_list)):
             for j in range(len(obs)):
@@ -399,25 +399,25 @@ class MultiTracker(BaseTracker):
         track_ind = list(row_ind) #the index in the track_id_list
         obs_ind = list(col_ind)   #the index in the obs
 
-        # Transform the indices back into a list of track_id and a list of obs ids
+        #3. Transform the indices back into a list of track_id and a list of obs ids
 
         associated_track_ids = []
         associated_obs_ids = []
 
         for track_i, obs_i in zip(track_ind, obs_ind):
             cost = cost_matrix[track_i, obs_i]
-
-            if cost < self.gating_threshold:   # Also, only add if it passes the gating check
+        #4. Also, only add if it passes the gating check
+            if cost < self.gating_threshold:  
                 associated_track_ids.append(track_id_list[track_i])
                 associated_obs_ids.append(obs_i)
 
         
-        # Turn obs_ind into a list of acturall observations
+        #5. Turn obs_ind into a list of acturall observations
         associated_obs = []
         for obs_id in associated_obs_ids:
             associated_obs.append(obs[obs_id])
 
-        #Last, lets get the obs which are not associated, so we can create new tracks for them
+        #6. Last, lets get the obs which are not associated, so we can create new tracks for them
         not_associated_obs = []
         for i, ob in enumerate(obs):
             if i not in associated_obs_ids:
