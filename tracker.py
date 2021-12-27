@@ -59,36 +59,22 @@ class Track: #This is a class for a track, which is tracking a single object usi
         stateE, stateCovarianceE, ob_E = self.filter.getPrediction(dt)
         self.ob_E = ob_E
         self.gated_obs = []
-        best_dist = float('inf')
-        
-        for ob in obs:
-            ob = ob
-            distance = self._euclidean_distance(ob, ob_E)
-            # distance = self._mahalanobis_distance(ob, ob_E, obsCov)
-            if distance < 20:
-                self.gated_obs.append(ob)
-                if distance < best_dist:
-                    best_dist = distance
-                    self.closest_ob = ob
-        if len(self.gated_obs) == 0:
-            self.closest_ob = None
-            self.gated_obs = None
-            # print('No valid obs in id: '+ str(self.track_id))
+        # best_dist = float('inf')
+        # for ob in obs:
+        #     ob = ob
+        #     distance = self._euclidean_distance(ob, ob_E)
+        #     # distance = self._mahalanobis_distance(ob, ob_E, obsCov)
+        #     if distance < 20:
+        #         self.gated_obs.append(ob)
+        #         if distance < best_dist:
+        #             best_dist = distance
+        #             self.closest_ob = ob
+        # if len(self.gated_obs) == 0:
+        #     self.closest_ob = None
+        #     self.gated_obs = None
+        #     # print('No valid obs in id: '+ str(self.track_id))
 
         return self.gated_obs
-
-    def isInGate(self, obs, dt, obsCov=None) -> bool:
-        '''
-        Check if the observation is in the gate
-        '''
-        
-        distance = self._euclidean_distance(obs, self.ob_E)
-        if distance < 20:
-            valid = True
-        else:
-            valid = False
-        print('Distance: ', distance)
-        return valid, distance
 
     def doPredictionStep(self, dt) -> np.array:
         return self.filter.prediction(dt) #return the state vector and covariance
@@ -158,6 +144,19 @@ class Track: #This is a class for a track, which is tracking a single object usi
         #Do the update
         stateVector = self.filter.update(observation, dt, observationCovariance=obsCov, doDeadReckoning=doDeadReckoning)
         return stateVector
+
+    # def isInGate(self, obs, dt, obsCov=None) -> bool: #Not used
+    #     '''
+    #     Check if the observation is in the gate
+    #     '''
+        
+    #     distance = self._euclidean_distance(obs, self.ob_E)
+    #     if distance < 20:
+    #         valid = True
+    #     else:
+    #         valid = False
+    #     print('Distance: ', distance)
+    #     return valid, distance
 
 class BaseTracker: #Base class for tracker, should be inherited (and overwritten by real tracker)
     def __init__(self) -> None:
@@ -250,6 +249,8 @@ class MultiTracker(BaseTracker):
         self.tracked_objects_dict = {} #the dict for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
 
+        self.max_track_num = 1000
+
         #Initialize trackers
         assert obs is not None
         assert len(obs) > 1
@@ -311,8 +312,20 @@ class MultiTracker(BaseTracker):
     def _createTrack(self, observation):
         '''
         Create a new track for the observation
+        1, Check if max_track_num is reached
+        2. Avoid track id number overflow
+        3. Avoid duplicate track id number
+        4. Create a new track
         '''
+        if len(self.tracked_objects_dict) > self.max_track_num:
+            return None
+            #raise Exception('Maximum number of tracks reached')
+
         self.next_track_id += 1
+        if self.next_track_id > self.max_track_num*10: #This is to avoid overflow
+            self.next_track_id = 0
+        while self.next_track_id in self.tracked_objects_dict.keys(): #Track ID already exists
+            self.next_track_id += 1
         # self.tracked_objects.append(Track(observation = observation, \
         #     motion_model=self.motion_model, track_id=self.next_track_id))
         self.tracked_objects_dict[self.next_track_id] = Track(observation = observation, \
@@ -354,15 +367,15 @@ class MultiTracker(BaseTracker):
             not_associated_observations -> [observation, observation,...]
 
         '''
-        #Calculate the num_tracks by num_observations cost matrix
+        #1. Calculate the num_tracks by num_observations cost matrix
         track_id_list = list(track_dict.keys()) #track_id_list = [1,9,3,...]
-        track_id_list.sort()
+        track_id_list.sort() #sort track id to reduce the chance of duplicate tracks for the same observation
         cost_matrix = np.zeros((len(track_id_list), len(obs))) #(num_tracks, num_observations)
         for i in range(len(track_id_list)):
             for j in range(len(obs)):
                 cost_matrix[i,j] = np.linalg.norm(obs[j]-track_dict[track_id_list[i]].ob_E)
 
-        #Find the best association
+        #2. Find the best association
         row_ind, col_ind = self._kuhn_munkres(cost_matrix)
         track_ind = list(row_ind) #the index in the track_id_list
         obs_ind = list(col_ind)   #the index in the obs
@@ -454,29 +467,6 @@ class MultiTracker(BaseTracker):
 
         return T
 
-
-
-    # def dataAssociation(self, observations, TrackedObjects):
-    #     '''
-    #     observations -> [[x,y],[x,y],...]
-    #     state_estimate -> [[x,y,vx,vy],[x,y,vx,vy],...]
-    #     trackedObjects -> [TrackedObject,TrackedObject,...]
-    #     '''
-    #     if self.association_method == 'GNN':
-    #         #TODO
-    #         return self.GNN(observations, state_estimate)
-    #     else:
-    #         raise Exception('Association method not supported')
-
-    # def trackManagement(self, observations, TrackedObjects):
-    #     pass
-
-    # def updateTracker(self, observation, dt,):
-
-    #     return self.state_estimate
-
-    # def gating(self, observations, state_estimate):
-    #     pass
     
 
 
@@ -515,7 +505,7 @@ if __name__ == "__main__":
                 pygame.quit()
                 quit()
         screen.fill((0, 0, 0))
-        env.draw(screen)
+        # env.draw(screen)
         observation = env.update()
         env.draw_observed_points(screen, observation)
         obs = np.array(observation)

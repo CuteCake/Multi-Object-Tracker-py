@@ -94,15 +94,23 @@ class PointsEnv:
         #delete an obervation randomly
         if random.random() < 0.9:
             observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
+        if random.random() < 0.9:
+            observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
         # add random noise to the observation
-        noise = np.array([[random.randint(0,self.width),random.randint(0,self.height)]])
-        observation = np.concatenate((observation,noise),axis=0)
+        if random.random() < 0.3:
+            noise = np.array([[random.randint(0,self.width),random.randint(0,self.height)]])
+            observation = np.concatenate((observation,noise),axis=0)
         return observation
 
     def get_last_dt(self):
         return self.clock.get_time()/1000.0
 
     def draw(self, screen):
+        '''
+        Draw the enviroment
+        It draws the ground truth with a white dot
+        It also draws a bounding box
+        '''
         for point in self.points:
             pygame.draw.circle(screen, (255, 255, 255), point.getXY() , self.pointSize)
             #draw a box polygon around the point, rotate it by the point's twist
