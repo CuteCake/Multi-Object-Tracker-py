@@ -414,31 +414,6 @@ class MultiTracker(BaseTracker):
 
         return associated_track_ids, associated_obs, not_associated_obs
 
-
-        # print('row_ind: ', row_ind)
-        # print('col_ind: ', col_ind)
-        # min_sum_dist = np.inf
-        
-        # permut = permutations(list(range(len(obs))),len(track_id_list))
-        # best_comnination = None
-        # for combination in permut:
-        #     zipped = zip(combination, track_id_list)
-        #     sum_dist = 0
-        #     #calculate the sum of euclidean distance
-        #     valid = True
-        #     for pair in zipped:
-        #         # print('pair: ', pair)
-        #         valid, dist = track_dict[pair[1]].isInGate(obs[pair[0]],dt)
-        #         if not valid:
-        #             valid = False
-        #         sum_dist += dist
-        #     #check if the sum of distance is better
-        #     if sum_dist < min_sum_dist and valid:
-        #         min_sum_dist = sum_dist
-        #         best_comnination = combination
-
-
-
     def _kuhn_munkres(self, cost_matrix):
         import scipy.optimize as op
         row_ind, col_ind = op.linear_sum_assignment(cost_matrix)
