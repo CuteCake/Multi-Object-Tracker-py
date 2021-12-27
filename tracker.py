@@ -1,32 +1,50 @@
-#Test a multi-object tracker on the environment from environment.py
 '''
 A Multi-Object Tracker implemented in Python
 
 It includes:
     - A Track class to store the Kalman Filter class and other info of a tracked object,
-        It also signals the tracker of its conformation and termination
+        It also signals the tracker of its conformation and termination etc.
 
     - A Tracker class to do the actual data association and tracking
 
-Author: Zhihao
+Test:
+    Tested on environment.py, those tests are passed:
+        - None input at initialization and running
+        - Single object
+        - No object, only noise
+        - Track ID overflows, then restart counting from 0
+        - Object detection dropping out randomly with added random noise
+        - Maximum number of tracks is reached
+        - 5 objects(0.2 dropout rate), 20 noise points: It kinda works! even a human is hard to track it!
+
+    Computation time safety limit analysis: let's assume we need 30 fps update rate, add a safety factor of 2,
+        then the limit is 1/60s per update. The maximum tracks should be around 140??
+
+        Test Case                                Max computation time
+             1  object, 1 noise               -> 1/700s per frame
+             5 objects, 2 noise               -> 1/600s per frame
+            20 objects, 1 noise               -> 1/200s per frame
+        136 tracks, 30 observations per frame -> 1/60s  per frame
+        160 tracks, 40 observations per frame -> 1/40s  per frame
 
 TODO : use a better track conformation method, E.g. m detection in recent n frames
 
 TODO : When a track is initialized, the state Covariance should be larger to make
         the KF trust more on the observation. This is to prevent the tracker from ommiting 
         objects which enter the frame too fast
+
+Author: Zhihao
+
 '''
 import random
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import math
 import pygame
-from pygame.math import disable_swizzling
-from enviroment import Point, PointsEnv
+import scipy.optimize as scipyOptim
+
 from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter
 
-from itertools import permutations, product
+
 
 class Track: #This is a class for a track, which is tracking a single object using some filter
     '''
@@ -70,6 +88,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
     
     def __del__(self):
         print('Track', self.track_id, 'deleted')
+        # pass
 
     def doGating(self, obs, dt, obsCov=None) -> None:
         '''
@@ -185,36 +204,6 @@ class BaseTracker: #Base class for tracker, should be inherited (and overwritten
         raise NotImplementedError
         return self.state_estimate  
         
-class SingleTracker(BaseTracker): #This is a simple Extended Kalman Filter tracker
-    '''
-    This is a single object Kalman Filter tracker
-    '''
-    def __init__(self, sensor_noise = 5, measurement_noise = 5, 
-        state_noise = 5, motion_model = 'constant_velocity'):
-        self.sensor_noise = sensor_noise
-        self.measurement_noise = measurement_noise
-        self.state_noise = state_noise
-
-        #The following are for logging purposes
-        self.state_estimate = []
-        self.state_estimate_history = []
-
-        self.measurement_history = []
-        self.prediction_history = []
-
-
-        if motion_model == 'constant_velocity':
-            self.motionFilter = ConstantVelocityFilter()
-        elif motion_model == 'constant_turning_rate':
-            self.motionFilter = ConstantVelocityConstantTurningRateFilter()
-        else:
-            raise Exception('Measurement model not supported')
-
-    def updateTracker(self, observation, dt):
-        print('dt: ', dt)
-        self.state_estimate = self.motionFilter.update(observation, dt)
-
-        return self.state_estimate
 
 class MultiTracker(BaseTracker):
     '''
@@ -244,10 +233,11 @@ class MultiTracker(BaseTracker):
               It updates one object using several models then outputs a weighted sum
 
     4. do gating (measurement validation)
-        This is mainly for JPDA
-        if the measurement is not in the gate range, don't waste the computation
+        if the measurement is not in the gate range of some observation, don't associate it 
 
-    5. retun the state_estimate
+    5. retun a List of confirmed (valid, active) Tracks.
+
+        Use Track.getState() to get the fused state
     '''
     def __init__(self, obs = None, sensor_noise = 5, measurement_noise = 5, 
         state_noise = 5, motion_model = 'constant_velocity',
@@ -268,7 +258,8 @@ class MultiTracker(BaseTracker):
         self.tracked_objects_dict = {} #the dict for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
 
-        self.max_track_num = 1000
+        self.max_track_num = 160
+        self.gating_threshold = 30
 
         #Initialize trackers
         if obs is not None:
@@ -284,7 +275,7 @@ class MultiTracker(BaseTracker):
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
 
-
+        # Update the extimation of the state for gating later
         for track in self.tracked_objects_dict.values():
             track.doGating(observations, dt)
         '''
@@ -300,28 +291,38 @@ class MultiTracker(BaseTracker):
         for track in self.tracked_objects:
             track.doCorrectionStep(observation, dt, obsCov) #TODO
         '''
+        # do the data association (gating included)
         track_ids_assod, obs_assod, obs_not_assod = self._GNN_data_association(observations, self.tracked_objects_dict, dt)
 
+        # do the prediction step in each track's kalman filter
         for track in self.tracked_objects_dict.values():
             track.doPredictionStep(dt)
 
+        # for every track which got an associated observation, do the correction step
+        # and update the track's status(confirmed/tentative, dead/alive etc)
         for track_id, ob in zip(track_ids_assod, obs_assod):
             self.tracked_objects_dict[track_id].doCorrectionStep(ob)
             self.tracked_objects_dict[track_id].doMaintenance(dt=dt, observation=ob)
-
+        
+        # for every track which did not get an associated observation, inform the track
         for id in self.tracked_objects_dict.keys():
             if id not in track_ids_assod:
                 self.tracked_objects_dict[id].doMaintenance(dt=dt, observation=None)
 
+        # for every observation which did not get an associated track, create a new track
         for ob in obs_not_assod:
             self._createTrack(ob)
 
+        # delete tracks which signals dead
         self._deleteDeadTracks()
 
+        #filter out the confirmed/valid tracks
         self.validTracks = {}
         for track in self.tracked_objects_dict.values():
             if track.isConfirmedTrack:
                 self.validTracks[track.track_id] = track
+
+        # return the list of confirmed/valid tracks
         return self.validTracks
 
     def _createTrack(self, observation):
@@ -334,6 +335,7 @@ class MultiTracker(BaseTracker):
         '''
 
         if len(self.tracked_objects_dict) > self.max_track_num:
+            print('Max track number reached')
             return None
             #raise Exception('Maximum number of tracks reached')
 
@@ -382,6 +384,7 @@ class MultiTracker(BaseTracker):
 
             not_associated_observations -> [observation, observation,...]
 
+        Warning: There are 3 levels of indexing, it's very easy to get confused
         '''
         #1. Calculate the num_tracks by num_observations cost matrix
         track_id_list = list(track_dict.keys()) #track_id_list = [1,9,3,...]
@@ -404,7 +407,7 @@ class MultiTracker(BaseTracker):
         for track_i, obs_i in zip(track_ind, obs_ind):
             cost = cost_matrix[track_i, obs_i]
 
-            if cost < 30:   # Also, only add if it passes the gating check, this is the gating threshold
+            if cost < self.gating_threshold:   # Also, only add if it passes the gating check
                 associated_track_ids.append(track_id_list[track_i])
                 associated_obs_ids.append(obs_i)
 
@@ -420,18 +423,13 @@ class MultiTracker(BaseTracker):
             if i not in associated_obs_ids:
                 not_associated_obs.append(ob)
                 
-        # print('not_associated_obs: ', len(not_associated_obs))
-        assert len(associated_track_ids) == len(associated_obs)
-        assert len(not_associated_obs) == len(obs) - len(associated_obs)
-        # print('finish data association')
-        # for id ,ob in zip(associated_track_ids, associated_obs):
-        #     print('track_id: ', id, 'obs: ', ob, 'dist: ', np.linalg.norm(ob-track_dict[id].ob_E))
+        # assert len(associated_track_ids) == len(associated_obs)
+        # assert len(not_associated_obs) == len(obs) - len(associated_obs)
 
         return associated_track_ids, associated_obs, not_associated_obs
 
     def _kuhn_munkres(self, cost_matrix):
-        import scipy.optimize as op
-        row_ind, col_ind = op.linear_sum_assignment(cost_matrix)
+        row_ind, col_ind = scipyOptim.linear_sum_assignment(cost_matrix)
         return row_ind, col_ind
 
     def _JPDA_data_association(self, observation, dt, obsCov=None):
@@ -457,6 +455,38 @@ class MultiTracker(BaseTracker):
 
         return T
 
+
+
+class SingleTracker(BaseTracker): #This is a simple single Kalman Filter tracker, only for testing
+    '''
+    This is a single object Kalman Filter tracker, , only for testing
+    '''
+    def __init__(self, sensor_noise = 5, measurement_noise = 5, 
+        state_noise = 5, motion_model = 'constant_velocity'):
+        self.sensor_noise = sensor_noise
+        self.measurement_noise = measurement_noise
+        self.state_noise = state_noise
+
+        #The following are for logging purposes
+        self.state_estimate = []
+        self.state_estimate_history = []
+
+        self.measurement_history = []
+        self.prediction_history = []
+
+
+        if motion_model == 'constant_velocity':
+            self.motionFilter = ConstantVelocityFilter()
+        elif motion_model == 'constant_turning_rate':
+            self.motionFilter = ConstantVelocityConstantTurningRateFilter()
+        else:
+            raise Exception('Measurement model not supported')
+
+    def updateTracker(self, observation, dt):
+        print('dt: ', dt)
+        self.state_estimate = self.motionFilter.update(observation, dt)
+
+        return self.state_estimate
     
 
 
@@ -484,9 +514,11 @@ if __name__ == "__main__":
     #     pygame.display.update()
     
     import time
+    from enviroment import PointsEnv
+
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
-    env = PointsEnv(640, 480, 6)
+    env = PointsEnv(640, 480, 5)
     observation = env.update()
     tracker = MultiTracker(obs=observation)
     while True:

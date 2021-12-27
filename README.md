@@ -1,6 +1,6 @@
 # Multi object tracking test platform
 ### An Multi object tracking agrithm in python
-The kalman filter is in motionModels.py
+The kalman filter is in motionModels.py.
 The tracker is in tracker.py, 
 ### An enviroment that generates a bunch of random points 
 which can move around and appering and reappearing
@@ -14,7 +14,7 @@ It also outputs the visualization of the enviroment using a pygame window
 
 Red dots are the observation, white dots are the groud truth, other dots are the prediction
 
-###Dependency: 
+### Dependency: 
 - scipy
 - pygame,  installation see:https://www.pygame.org/wiki/GettingStarted
 

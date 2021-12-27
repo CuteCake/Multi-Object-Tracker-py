@@ -48,7 +48,7 @@ class ConstantVelocityFilter(BaseFilter):
             np.array(   [[1, 0], \
                         [0, 1], ]) * observationNoise
         self.observationMatrix = np.array([[1, 0, 0, 0], \
-                                            [0, 1, 0, 0]])
+                                           [0, 1, 0, 0]])
         self.stateCovariance = np.eye(4) * stateNoise
         self.observationCovariance = np.eye(2) * observationNoise
         self.id = id
