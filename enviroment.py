@@ -22,6 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import math
+
 class Point:
     def __init__(self,posx,posy,twist,velocity,angular_velocity,pointID):
         self.posx = posx
@@ -57,14 +58,16 @@ class PointsEnv:
         self.boxSizeX = width / 20
         self.boxSizeY = height / 20
         self.observation_noise = observation_noise
-
+        self.dropOutProb = 0.2
+        self.randomNoiseProb = 1 #Tthe probability of adding a random noise to the observation, It can be 
+                                    # greater than 1, which adds more than 1 noise points
         self.clock = pygame.time.Clock()
 
     def generatePoint(self,id):
         point_a = Point(random.randrange(0,self.width), # initial x
             random.randrange(0,self.height),            # initial y
             random.uniform(0,2*math.pi),                # initial twist
-            (random.uniform(0,4)+30),                   # initial velocity
+            (random.uniform(0,10)+40),                   # initial velocity
             0 + random.gauss(0,10),                     # initial angular_velocity
             id)
         return point_a
@@ -92,14 +95,19 @@ class PointsEnv:
             observation[i,0] = (self.points[i].posx + random.gauss(0,self.observation_noise))
             observation[i,1] = (self.points[i].posy + random.gauss(0,self.observation_noise))
         #delete an obervation randomly
-        if random.random() < 0.9:
-            observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
-        if random.random() < 0.9:
-            observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
+        # if random.random() < 0.9:
+        #     observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
+        for _ in range(len(observation)):
+            if random.random() < self.dropOutProb and len(observation) >0:
+                observation = np.delete(observation,random.randrange(0,len(observation)),axis=0)
+
         # add random noise to the observation
-        if random.random() < 0.3:
-            noise = np.array([[random.randint(0,self.width),random.randint(0,self.height)]])
-            observation = np.concatenate((observation,noise),axis=0)
+        noise_volume = self.randomNoiseProb
+        while(noise_volume > 0):
+            if random.random() < noise_volume:
+                noise = np.array([[random.randint(0,self.width),random.randint(0,self.height)]])
+                observation = np.concatenate((observation,noise),axis=0)
+                noise_volume -= 1
         return observation
 
     def get_last_dt(self):

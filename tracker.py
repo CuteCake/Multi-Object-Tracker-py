@@ -1,4 +1,21 @@
 #Test a multi-object tracker on the environment from environment.py
+'''
+A Multi-Object Tracker implemented in Python
+
+It includes:
+    - A Track class to store the Kalman Filter class and other info of a tracked object,
+        It also signals the tracker of its conformation and termination
+
+    - A Tracker class to do the actual data association and tracking
+
+Author: Zhihao
+
+TODO : use a better track conformation method, E.g. m detection in recent n frames
+
+TODO : When a track is initialized, the state Covariance should be larger to make
+        the KF trust more on the observation. This is to prevent the tracker from ommiting 
+        objects which enter the frame too fast
+'''
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +28,6 @@ from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningR
 
 from itertools import permutations, product
 
-
 class Track: #This is a class for a track, which is tracking a single object using some filter
     '''
     This is a Track class that can automatically do management itself
@@ -23,8 +39,8 @@ class Track: #This is a class for a track, which is tracking a single object usi
     hope the garbage collector will do the job
     '''
     def __init__(self,observation = None, motion_model = 'constant_velocity', track_id=None,
-     time_to_confirm = 0.2, #time to confirm a track
-     time_to_kill = 0.2):  #time to kill a track if not recived observations
+     time_to_confirm = 0.15, #time to confirm a track
+     time_to_kill = 0.3):  #time to kill a track if not recived observations
         assert observation is not None
 
         if motion_model == 'constant_velocity': #set initial state from observation
@@ -38,7 +54,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
         else:
             raise NotImplementedError
         
-        self.color = (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+        self.color = (random.randint(40,255),random.randint(40,255),random.randint(40,255))
 
         #The following part is for track maintaince
         self.track_id = track_id
@@ -56,6 +72,10 @@ class Track: #This is a class for a track, which is tracking a single object usi
         print('Track', self.track_id, 'deleted')
 
     def doGating(self, obs, dt, obsCov=None) -> None:
+        '''
+        get the estimated state vector and covariance matrix, and observation vector
+        The gating happens in the Track class
+        '''
         stateE, stateCovarianceE, ob_E = self.filter.getPrediction(dt)
         self.ob_E = ob_E
         self.gated_obs = []
@@ -237,25 +257,23 @@ class MultiTracker(BaseTracker):
         self.state_noise = state_noise
 
         #The following are for logging purposes
-        self.state_estimate = []
-        self.state_estimate_history = []
-
-        self.measurement_history = []
-        self.prediction_history = []
+        # self.state_estimate = []
+        # self.state_estimate_history = []
+        # self.measurement_history = []
+        # self.prediction_history = []
 
         self.motion_model = motion_model
         self.association_method = association_method
-        # self.tracked_objects = [] #the list for tracks, including confirmed and tentative tracks
+        
         self.tracked_objects_dict = {} #the dict for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
 
         self.max_track_num = 1000
 
         #Initialize trackers
-        assert obs is not None
-        assert len(obs) > 1
-        for i in range(len(obs)):
-            self._createTrack(obs[i])
+        if obs is not None:
+            for i in range(len(obs)):
+                self._createTrack(obs[i])
 
         
     def updateTracker(self, observations, dt, obsCov=None):
@@ -266,9 +284,6 @@ class MultiTracker(BaseTracker):
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
 
-        #Do gating before association
-        #Call prediction step for every track's filter, get the new state_estimate for association
-        #1. data association 
 
         for track in self.tracked_objects_dict.values():
             track.doGating(observations, dt)
@@ -317,6 +332,7 @@ class MultiTracker(BaseTracker):
         3. Avoid duplicate track id number
         4. Create a new track
         '''
+
         if len(self.tracked_objects_dict) > self.max_track_num:
             return None
             #raise Exception('Maximum number of tracks reached')
@@ -381,18 +397,17 @@ class MultiTracker(BaseTracker):
         obs_ind = list(col_ind)   #the index in the obs
 
         # Transform the indices back into a list of track_id and a list of obs ids
-        # Also, only add if it passes the gating check
+
         associated_track_ids = []
         associated_obs_ids = []
 
         for track_i, obs_i in zip(track_ind, obs_ind):
             cost = cost_matrix[track_i, obs_i]
 
-            if cost < 50:
+            if cost < 30:   # Also, only add if it passes the gating check, this is the gating threshold
                 associated_track_ids.append(track_id_list[track_i])
                 associated_obs_ids.append(obs_i)
-                # assert np.linalg.norm(obs[obs_i]-track_dict[track_id_list[track_i]].ob_E) < 20
-                # print('track_id: ', track_i, 'dist: ', np.linalg.norm(obs[obs_i]-track_dict[track_id_list[track_i]].ob_E))
+
         
         # Turn obs_ind into a list of acturall observations
         associated_obs = []
@@ -435,7 +450,7 @@ class MultiTracker(BaseTracker):
     def _2D_mahalannobis_threshold_from_probability(self, prob, Dim):
         '''
         Calculate the threshold for Mahalanobis distance from probability 
-        that observation is valid
+        that a valid observation falls within the threshold
         '''
 
         T = math.sqrt(-2*math.log(1-prob)) #only valid for Dim = 2
@@ -446,6 +461,7 @@ class MultiTracker(BaseTracker):
 
 
 if __name__ == "__main__":
+    # #Test Single tracker:
     # pygame.init()
     # screen = pygame.display.set_mode((640, 480))
     # env = PointsEnv(640, 480, 10)
@@ -468,10 +484,9 @@ if __name__ == "__main__":
     #     pygame.display.update()
     
     import time
-
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
-    env = PointsEnv(640, 480, 10)
+    env = PointsEnv(640, 480, 6)
     observation = env.update()
     tracker = MultiTracker(obs=observation)
     while True:
@@ -489,7 +504,7 @@ if __name__ == "__main__":
         # The call to update tracker, input is a 2D array of observation, 
         # and the output is a array of Track objects
         objects_dict = tracker.updateTracker(obs, env.get_last_dt())
-        # print('fps:', 1/(time.time()-start_time))
+        print('fps:', 1/(time.time()-start_time))
         # env.draw_prediction(screen, stateVec)
         # print('sum of track id: ', len(objects_dict.keys()))
         for object in objects_dict.values():
