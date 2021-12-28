@@ -1,7 +1,17 @@
+'''
+This files stores a bunch of Kalman Filters for the tracker.
+
+If we use the most basic constant velocity model, we don't need to care about reference frame
+too much, but make sure the relative velocity is not too fast or it might have problem with
+data association.
+
+If we use the constant velocity constant turning rate model, we need to do the tracking in 
+earth / map / ENU reference frame.
+
+Author: Zhihao
+'''
+
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from enviroment import Point, PointsEnv
 
 class BaseFilter: #This is a template for motion filters, should be overwritten
     def __init__(self):
@@ -137,6 +147,12 @@ class ConstantVelocityFilter(BaseFilter):
         obsE = self.observationMatrix.dot(stateE)
 
         return stateE, stateCovarianceE, obsE
+
+# TODO: Add a 3D linear constand velocity model (might consider restricing z velocity to 0)
+class ConstantVelocityFilter3D(ConstantVelocityFilter):
+    def __init__(self, x=0, y=0, vx=0, vy=0, stateNoise=0.5, observationNoise=10, id=None):
+        super().__init__(x=x, y=y, vx=vx, vy=vy, stateNoise=stateNoise, observationNoise=observationNoise, id=id)
+
 
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):
     '''

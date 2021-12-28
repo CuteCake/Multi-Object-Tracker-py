@@ -3,7 +3,7 @@ A Multi-Object Tracker implemented in Python
 
 It includes:
     - A Track class to store the Kalman Filter class and other info of a tracked object,
-        It also signals the tracker of its conformation and termination etc.
+        It also signals the tracker of its confirmation and termination etc.
 
     - A Tracker class to do the actual data association and tracking
 
@@ -33,13 +33,14 @@ TODO : When a track is initialized, the state Covariance should be larger to mak
         the KF trust more on the observation. This is to prevent the tracker from ommiting 
         objects which enter the frame too fast
 
+TODO : Get all the parameters to be hand tuned collected outside the code
+
 Author: Zhihao
 
 '''
 import random
 import numpy as np
 import math
-import pygame
 import scipy.optimize as scipyOptim
 
 from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter
@@ -54,7 +55,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
     Use a upper level class to get the .isDead and .isConfirmedTrack to update the list of tracks
 
     To delete a track, delete the reference of the track from the upper level class, 
-    hope the garbage collector will do the job
+    the garbage collector will do the job
     '''
     def __init__(self,observation = None, motion_model = 'constant_velocity', track_id=None,
      time_to_confirm = 0.15, #time to confirm a track
@@ -292,7 +293,8 @@ class MultiTracker(BaseTracker):
             track.doCorrectionStep(observation, dt, obsCov) #TODO
         '''
         # do the data association (gating included)
-        track_ids_assod, obs_assod, obs_not_assod = self._GNN_data_association(observations, self.tracked_objects_dict, dt)
+        track_ids_assod, obs_assod, obs_not_assod = \
+            self._GNN_data_association(observations, self.tracked_objects_dict, dt)
 
         # do the prediction step in each track's kalman filter
         for track in self.tracked_objects_dict.values():
@@ -360,7 +362,8 @@ class MultiTracker(BaseTracker):
         #         #and the track will be deleted automatically
         #         #potential bug: the index of the list will be changed??
 
-         #Method 2: using the dict:
+        # When using the dict, we cannot pop() while we are iterating in the dict,
+        # or it will get index error
         id_to_delete = []
         for id,track in self.tracked_objects_dict.items():
             if track.isDead:
@@ -491,7 +494,11 @@ class SingleTracker(BaseTracker): #This is a simple single Kalman Filter tracker
 
 
 if __name__ == "__main__":
+    import time
+    from enviroment import PointsEnv
+    import pygame
     # #Test Single tracker:
+
     # pygame.init()
     # screen = pygame.display.set_mode((640, 480))
     # env = PointsEnv(640, 480, 10)
@@ -513,8 +520,7 @@ if __name__ == "__main__":
     #     pygame.draw.circle(screen, (10,10, 255), (int(stateVec[0]),int(stateVec[1])), 5)
     #     pygame.display.update()
     
-    import time
-    from enviroment import PointsEnv
+    #Test Multi tracker:
 
     pygame.init()
     screen = pygame.display.set_mode((640, 480))

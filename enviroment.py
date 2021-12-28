@@ -60,7 +60,7 @@ class PointsEnv:
         self.boxSizeY = height / 20
         self.observation_noise = observation_noise
         self.dropOutProb = 0.2
-        self.randomNoiseProb = 5 #Tthe probability of adding a random noise to the observation, It can be 
+        self.randomNoiseProb = 1 #Tthe probability of adding a random noise to the observation, It can be 
                                     # greater than 1, which adds more than 1 noise points
         self.clock = pygame.time.Clock()
 
