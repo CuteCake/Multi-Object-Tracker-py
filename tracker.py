@@ -33,7 +33,9 @@ TODO : When a track is initialized, the state Covariance should be larger to mak
         the KF trust more on the observation. This is to prevent the tracker from ommiting 
         objects which enter the frame too fast
 
-TODO : Get all the parameters to be hand tuned collected outside the code
+TODO IMPORTANT: Get all the parameters to be hand tuned collected outside the code
+
+TODO : Test the framework with different object motion models (2D, 3D, etc)
 
 Author: Zhihao
 
