@@ -44,7 +44,7 @@ class ConstantVelocityFilter(BaseFilter):
     It is linear, that's why it can be represented as a matrix.
     '''
     def __init__(self, x=0, y=0, vx=0, vy=0, \
-        stateNoise=0.5,observationNoise=10, id=None):
+        stateNoise=0.5,observationNoise=10, stateInitNoise=1):
         #state variables in Numpy array
         #[x, y, vx, vy].T
 
@@ -60,7 +60,8 @@ class ConstantVelocityFilter(BaseFilter):
                         [0, 1], ]) * observationNoise
         self.observationMatrix = np.array([[1, 0, 0, 0], \
                                            [0, 1, 0, 0]])
-        self.stateCovariance = np.eye(4) * stateNoise
+        self.stateCovariance = np.eye(4) * stateNoise*2   #TODO:  The initial state covariance is 2 times
+                                            # the transition noise, for a better fix  in the future this should be adjustable
         self.observationCovariance = np.eye(2) * observationNoise
         self.id = id
 
@@ -186,7 +187,6 @@ class ConstantVelocityFilter_3D_Z0(ConstantVelocityFilter):
                                            [0, 1, 0, 0, 0, 0]])
         self.stateCovariance = np.eye(6) * stateNoise
         self.observationCovariance = np.eye(2) * observationNoise
-        self.id = id
 
     def getStateUpdateMatrix(self, dt): #Get state estimation but don't update
         self.stateUpdateMatrix = np.array([ [1, 0, 0, dt, 0, 0], \
