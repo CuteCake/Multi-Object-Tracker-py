@@ -49,6 +49,7 @@ class ConstantVelocityFilter(BaseFilter):
         #[x, y, vx, vy].T
 
         self.stateVector = np.array([x, y, vx, vy]).T #It is a column vector
+        self.stateDim = len(self.stateVector) 
         self.stateTransitionCovariance = \
             np.array(   [[1, 0, 0, 0], \
                         [0, 1, 0, 0], \
@@ -88,7 +89,7 @@ class ConstantVelocityFilter(BaseFilter):
             self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
         #Correct prediction
         self.stateVector = stateE + kalmanGain.dot(np.array(observation).T - self.observationMatrix.dot(stateE))
-        self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
+        self.stateCovariance = (np.eye(self.stateDim) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
         return self.stateVector
 
     def prediction(self, dt):
@@ -131,7 +132,7 @@ class ConstantVelocityFilter(BaseFilter):
             self.observationMatrix.dot(stateCovarianceE).dot(self.observationMatrix.T)))
         #Correct prediction
         self.stateVector = stateE + kalmanGain.dot(np.array(observation).T - self.observationMatrix.dot(stateE))
-        self.stateCovariance = (np.eye(4) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
+        self.stateCovariance = (np.eye(self.stateDim) - kalmanGain.dot(self.observationMatrix)).dot(stateCovarianceE)
         return self.stateVector
 
     def getPrediction(self, dt):
@@ -149,9 +150,54 @@ class ConstantVelocityFilter(BaseFilter):
         return stateE, stateCovarianceE, obsE
 
 # TODO: Add a 3D linear constand velocity model (might consider restricing z velocity to 0)
-class ConstantVelocityFilter3D(ConstantVelocityFilter):
-    def __init__(self, x=0, y=0, vx=0, vy=0, stateNoise=0.5, observationNoise=10, id=None):
-        super().__init__(x=x, y=y, vx=vx, vy=vy, stateNoise=stateNoise, observationNoise=observationNoise, id=id)
+class ConstantVelocityFilter_3D_Z0(ConstantVelocityFilter):
+    '''
+    Constent velocity model Kalman Filter in 3D, Z velocity is always 0
+    The state space is defined as:
+    [x, y, z, vx, vy, vz]: x,y are the position, vx,vy are the velocities
+
+    The observation space is defined as:
+    [x, y, z]
+
+    The state transition model is:
+    x(k+1) = x(k) + vx(k) * dt
+    y(k+1) = y(k) + vy(k) * dt
+    z(k+1) = z(k) + vz(k) * dt
+    vx(k+1) = vx(k)
+    vy(k+1) = vy(k)
+    vz(k+1) = 0
+    It is linear, that's why it can be represented as a matrix.
+    But in CVCT it can only be represented as a bunch of equations.
+
+    The observation model is:
+    x(k) = x(k)
+    y(k) = y(k)
+    It is linear, that's why it can be represented as a matrix.
+    '''
+    def __init__(self, x=0, y=0, z=0, vx=0, vy=0, vz=0, \
+        stateNoise=0.5,observationNoise=10, id=None):
+        self.stateVector = np.array([x, y, z, vx, vy, vz]).T #It is a column vector
+        self.stateDim = len(self.stateVector) 
+        self.stateTransitionCovariance = np.eye(6) * stateNoise
+        self.observationCovariance = \
+            np.array(   [[1, 0], \
+                        [0, 1], ]) * observationNoise
+        self.observationMatrix = np.array([[1, 0, 0, 0, 0, 0], \
+                                           [0, 1, 0, 0, 0, 0]])
+        self.stateCovariance = np.eye(6) * stateNoise
+        self.observationCovariance = np.eye(2) * observationNoise
+        self.id = id
+
+    def getStateUpdateMatrix(self, dt): #Get state estimation but don't update
+        self.stateUpdateMatrix = np.array([ [1, 0, 0, dt, 0, 0], \
+                                            [0, 1, 0, 0, dt, 0], \
+                                            [0, 0, 1, 0,  0,dt], \
+                                            [0, 0, 0, 1,  0, 0], \
+                                            [0, 0, 0, 0,  1, 0], \
+                                            [0, 0, 0, 0,  0, 0]])
+        return self.stateUpdateMatrix
+
+    # The other functions, such as update, predict, are inherated from the parent class
 
 
 class ConstantVelocityConstantTurningRateFilter(BaseFilter):

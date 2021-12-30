@@ -45,7 +45,8 @@ import numpy as np
 import math
 import scipy.optimize as scipyOptim
 
-from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter
+from motionModel import ConstantVelocityFilter, ConstantVelocityConstantTurningRateFilter, \
+    ConstantVelocityFilter_3D_Z0
 
 
 
@@ -70,6 +71,14 @@ class Track: #This is a class for a track, which is tracking a single object usi
                 y = observation[1],
                 vx = 0,
                 vy = 0)
+        elif motion_model == 'constant_velocity_3d_z0': #set initial state from observation
+            self.filter = ConstantVelocityFilter_3D_Z0(
+                x = observation[0],
+                y = observation[1],
+                z = 0,
+                vx = 0,
+                vy = 0,
+                vz = 0)
         elif motion_model == 'constant_velocity_constant_turning_rate':
             raise NotImplementedError
         else:
@@ -87,11 +96,11 @@ class Track: #This is a class for a track, which is tracking a single object usi
         self.isDead = False
         self.closest_ob = None
 
-        print('Track created with id:', self.track_id)
+        # print('Track created with id:', self.track_id)
     
     def __del__(self):
-        print('Track', self.track_id, 'deleted')
-        # pass
+        # print('Track', self.track_id, 'deleted')
+        pass
 
     def doGating(self, obs, dt, obsCov=None) -> None:
         '''
@@ -243,8 +252,10 @@ class MultiTracker(BaseTracker):
         Use Track.getState() to get the fused state
     '''
     def __init__(self, obs = None, sensor_noise = 5, measurement_noise = 5, 
-        state_noise = 5, motion_model = 'constant_velocity',
-        association_method = 'GNN'):
+        state_noise = 5, motion_model = 'constant_velocity_3d_z0',
+        association_method = 'GNN',
+        max_track_num = 160,
+        gating_threshold = 30):
         self.sensor_noise = sensor_noise
         self.measurement_noise = measurement_noise
         self.state_noise = state_noise
@@ -261,8 +272,8 @@ class MultiTracker(BaseTracker):
         self.tracked_objects_dict = {} #the dict for tracks, including confirmed and tentative tracks
         self.next_track_id = 0
 
-        self.max_track_num = 160
-        self.gating_threshold = 30
+        self.max_track_num = max_track_num
+        self.gating_threshold = gating_threshold
 
         #Initialize trackers
         if obs is not None:
