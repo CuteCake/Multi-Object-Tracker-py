@@ -62,7 +62,9 @@ class Track: #This is a class for a track, which is tracking a single object usi
     '''
     def __init__(self,observation = None, motion_model = 'constant_velocity', track_id=None,
      time_to_confirm = 0.15, #time to confirm a track
-     time_to_kill = 0.3):  #time to kill a track if not recived observations
+     time_to_kill = 0.3,  #time to kill a track if not recived observations
+     stateNoise   = 0.5,
+     observationNoise = 5):
         assert observation is not None
 
         if motion_model == 'constant_velocity': #set initial state from observation
@@ -95,40 +97,18 @@ class Track: #This is a class for a track, which is tracking a single object usi
         self.time_to_kill = time_to_kill
         self.isDead = False
         self.closest_ob = None
+        self.stateNoise = stateNoise
+        self.observationNoise = observationNoise
 
         # print('Track created with id:', self.track_id)
     
-    def __del__(self):
-        # print('Track', self.track_id, 'deleted')
-        pass
-
-    def doGating(self, obs, dt, obsCov=None) -> None:
-        '''
-        get the estimated state vector and covariance matrix, and observation vector
-        The gating happens in the Track class
-        '''
-        stateE, stateCovarianceE, ob_E = self.filter.getPrediction(dt)
-        self.ob_E = ob_E
-        self.gated_obs = []
-        # best_dist = float('inf')
-        # for ob in obs:
-        #     ob = ob
-        #     distance = self._euclidean_distance(ob, ob_E)
-        #     # distance = self._mahalanobis_distance(ob, ob_E, obsCov)
-        #     if distance < 20:
-        #         self.gated_obs.append(ob)
-        #         if distance < best_dist:
-        #             best_dist = distance
-        #             self.closest_ob = ob
-        # if len(self.gated_obs) == 0:
-        #     self.closest_ob = None
-        #     self.gated_obs = None
-        #     # print('No valid obs in id: '+ str(self.track_id))
-
-        return self.gated_obs
+    # def __del__(self):
+    #     print('Track', self.track_id, 'deleted')
+        
 
     def doPredictionStep(self, dt) -> np.array:
-        return self.filter.prediction(dt) #return the state vector and covariance
+        _,_,self.ob_E =  self.filter.prediction(dt) #return the state vector and covariance
+        return
 
     def doCorrectionStep(self, observation, obsCov=None) -> None:
         stateVector = self.filter.correction(observation, observationCovariance=obsCov)
@@ -196,18 +176,6 @@ class Track: #This is a class for a track, which is tracking a single object usi
         stateVector = self.filter.update(observation, dt, observationCovariance=obsCov, doDeadReckoning=doDeadReckoning)
         return stateVector
 
-    # def isInGate(self, obs, dt, obsCov=None) -> bool: #Not used
-    #     '''
-    #     Check if the observation is in the gate
-    #     '''
-        
-    #     distance = self._euclidean_distance(obs, self.ob_E)
-    #     if distance < 20:
-    #         valid = True
-    #     else:
-    #         valid = False
-    #     print('Distance: ', distance)
-    #     return valid, distance
 
 class BaseTracker: #Base class for tracker, should be inherited (and overwritten by real tracker)
     def __init__(self) -> None:
@@ -251,14 +219,15 @@ class MultiTracker(BaseTracker):
 
         Use Track.getState() to get the fused state
     '''
-    def __init__(self, obs = None, sensor_noise = 5, measurement_noise = 5, 
-        state_noise = 5, motion_model = 'constant_velocity_3d_z0',
+    def __init__(self, obs = None, 
+        state_noise = 5, 
+        motion_model = 'constant_velocity',
         association_method = 'GNN',
         max_track_num = 160,
-        gating_threshold = 30):
-        self.sensor_noise = sensor_noise
-        self.measurement_noise = measurement_noise
+        gating_threshold = 30,
+        observation_noise = 5):
         self.state_noise = state_noise
+        self.observation_noise = observation_noise
 
         #The following are for logging purposes
         # self.state_estimate = []
@@ -289,9 +258,13 @@ class MultiTracker(BaseTracker):
         trackedObjects -> [TrackedObject,TrackedObject,...]
         '''
 
-        # Update the extimation of the state for gating later
+        # # Update the extimation of the state for gating later
+        # for track in self.tracked_objects_dict.values():
+        #     track.doGating(observations, dt)
+
+        # do the prediction step in each track's kalman filter
         for track in self.tracked_objects_dict.values():
-            track.doGating(observations, dt)
+            track.doPredictionStep(dt)
         '''
         if self.association_method == 'GNN':
             self._GNN_data_association(observation, dt, obsCov=obsCov)
@@ -309,9 +282,6 @@ class MultiTracker(BaseTracker):
         track_ids_assod, obs_assod, obs_not_assod = \
             self._GNN_data_association(observations, self.tracked_objects_dict, dt)
 
-        # do the prediction step in each track's kalman filter
-        for track in self.tracked_objects_dict.values():
-            track.doPredictionStep(dt)
 
         # for every track which got an associated observation, do the correction step
         # and update the track's status(confirmed/tentative, dead/alive etc)
@@ -320,6 +290,7 @@ class MultiTracker(BaseTracker):
             self.tracked_objects_dict[track_id].doMaintenance(dt=dt, observation=ob)
         
         # for every track which did not get an associated observation, inform the track
+        # with observation = None
         for id in self.tracked_objects_dict.keys():
             if id not in track_ids_assod:
                 self.tracked_objects_dict[id].doMaintenance(dt=dt, observation=None)
@@ -362,7 +333,8 @@ class MultiTracker(BaseTracker):
         # self.tracked_objects.append(Track(observation = observation, \
         #     motion_model=self.motion_model, track_id=self.next_track_id))
         self.tracked_objects_dict[self.next_track_id] = Track(observation = observation, \
-            motion_model=self.motion_model, track_id=self.next_track_id)
+            motion_model=self.motion_model, track_id=self.next_track_id, \
+                stateNoise = self.state_noise, observationNoise = self.observation_noise )
         return self.next_track_id
 
     def _deleteDeadTracks(self):
