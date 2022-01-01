@@ -150,7 +150,7 @@ class ConstantVelocityFilter(BaseFilter):
 
         return stateE, stateCovarianceE, obsE
 
-# TODO: Add a 3D linear constand velocity model (might consider restricing z velocity to 0)
+
 class ConstantVelocityFilter_3D_Z0(ConstantVelocityFilter):
     '''
     Constent velocity model Kalman Filter in 3D, Z velocity is always 0
