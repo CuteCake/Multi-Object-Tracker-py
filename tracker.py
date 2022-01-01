@@ -265,23 +265,14 @@ class MultiTracker(BaseTracker):
         # do the prediction step in each track's kalman filter
         for track in self.tracked_objects_dict.values():
             track.doPredictionStep(dt)
-        '''
+
+
+        # do the data association (gating included)
         if self.association_method == 'GNN':
-            self._GNN_data_association(observation, dt, obsCov=obsCov)
+            track_ids_assod, obs_assod, obs_not_assod = \
+                self._GNN_data_association(observations, self.tracked_objects_dict, dt)
         else:
             raise Exception('Association method not supported')
-        
-        #2. track management
-        self._deleteDeadTracks()
-
-        #3. track update
-        for track in self.tracked_objects:
-            track.doCorrectionStep(observation, dt, obsCov) #TODO
-        '''
-        # do the data association (gating included)
-        track_ids_assod, obs_assod, obs_not_assod = \
-            self._GNN_data_association(observations, self.tracked_objects_dict, dt)
-
 
         # for every track which got an associated observation, do the correction step
         # and update the track's status(confirmed/tentative, dead/alive etc)
