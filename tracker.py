@@ -102,7 +102,7 @@ class Track: #This is a class for a track, which is tracking a single object usi
 
         # print('Track created with id:', self.track_id)
     
-    # def __del__(self):
+    # def __del__(self): #Debugging
     #     print('Track', self.track_id, 'deleted')
         
 
@@ -154,27 +154,27 @@ class Track: #This is a class for a track, which is tracking a single object usi
 
         return D
 
-    def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:#This is abandonded
+    # def update(self, observation, dt, obsCov=None, doDeadReckoning=False) -> None:#This is abandonded
         
-        #Do the maintenance of the track
-        #Update the timers of the track
-        if observation is None:
-            doDeadReckoning = True
-            self.time_not_recived_observations += dt
-            self.time_recived_observations = 0
-        else:
-            self.time_recived_observations += dt
-            self.time_not_recived_observations = 0
+    #     #Do the maintenance of the track
+    #     #Update the timers of the track
+    #     if observation is None:
+    #         doDeadReckoning = True
+    #         self.time_not_recived_observations += dt
+    #         self.time_recived_observations = 0
+    #     else:
+    #         self.time_recived_observations += dt
+    #         self.time_not_recived_observations = 0
 
-        #Update the status of the track
-        if self.time_recived_observations > self.time_to_confirm:
-            self.isConfirmedTrack = True
-        if self.time_not_recived_observations > self.time_to_kill:
-            self.isDead = True
+    #     #Update the status of the track
+    #     if self.time_recived_observations > self.time_to_confirm:
+    #         self.isConfirmedTrack = True
+    #     if self.time_not_recived_observations > self.time_to_kill:
+    #         self.isDead = True
 
-        #Do the update
-        stateVector = self.filter.update(observation, dt, observationCovariance=obsCov, doDeadReckoning=doDeadReckoning)
-        return stateVector
+    #     #Do the update
+    #     stateVector = self.filter.update(observation, dt, observationCovariance=obsCov, doDeadReckoning=doDeadReckoning)
+    #     return stateVector
 
 
 class BaseTracker: #Base class for tracker, should be inherited (and overwritten by real tracker)
@@ -330,13 +330,8 @@ class MultiTracker(BaseTracker):
 
     def _deleteDeadTracks(self):
         '''
-        Delete a track
+        Delete tracks that had the .isDead = True label
         '''
-        # for index, track in enumerate(self.tracked_objects):
-        #     if track.isDead:
-        #         self.tracked_objects.pop(index) #delete the track from the list, 
-        #         #and the track will be deleted automatically
-        #         #potential bug: the index of the list will be changed??
 
         # When using the dict, we cannot pop() while we are iterating in the dict,
         # or it will get index error
@@ -374,7 +369,7 @@ class MultiTracker(BaseTracker):
                 cost_matrix[i,j] = np.linalg.norm(obs[j]-track_dict[track_id_list[i]].ob_E)
 
         #2. Find the best association
-        row_ind, col_ind = self._kuhn_munkres(cost_matrix)
+        row_ind, col_ind = scipyOptim.linear_sum_assignment(cost_matrix)
         track_ind = list(row_ind) #the index in the track_id_list
         obs_ind = list(col_ind)   #the index in the obs
 
@@ -407,12 +402,6 @@ class MultiTracker(BaseTracker):
 
         return associated_track_ids, associated_obs, not_associated_obs
 
-    def _kuhn_munkres(self, cost_matrix):
-        row_ind, col_ind = scipyOptim.linear_sum_assignment(cost_matrix)
-        return row_ind, col_ind
-
-    def _JPDA_data_association(self, observation, dt, obsCov=None):
-        raise NotImplementedError
 
     def _mahalanobis_distance(self, obs, obs_predicted, obsPCov):
         '''
@@ -500,7 +489,7 @@ if __name__ == "__main__":
 
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
-    env = PointsEnv(640, 480, 5)
+    env = PointsEnv(640, 480, 2)
     observation = env.update()
     tracker = MultiTracker(obs=observation)
     while True:
