@@ -23,14 +23,35 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import math
 
+sensor_config = [
+    {
+        'name': 'radar-cam',
+        'refresh_rate': 60,
+        'observation_noise': 5,
+        'dropout_prob': 0.2,
+        'random_noise_prob': 1,
+        'display_color': (255,0,0)
+    },
+    {
+        'name': 'lidar-cam',
+        'refresh_rate': 20,
+        'observation_noise': 5,
+        'dropOutProb': 0.2,
+        'randomNoiseProb': 1,
+        'display_color': (0,255,0)
+    }
+]
+
+
 class Point:
-    def __init__(self,posx,posy,twist,velocity,angular_velocity,pointID):
+    def __init__(self,posx,posy,twist,velocity,angular_velocity,point_id,sensor_config=None):
         self.posx = posx
         self.posy = posy
         self.twist = twist
         self.velocity = velocity
-        self.pointID = pointID
+        self.point_id = point_id
         self.angular_velocity = angular_velocity
+        self.sensor_config = sensor_config
 
 
     def update(self,dt): #This is a constant velocity, constant turning rate model, this update is for ground truth generation
@@ -41,26 +62,26 @@ class Point:
         self.twist += self.angular_velocity*dt
         self.twist = self.twist%(2*math.pi)
         self.velocity += random.gauss(0,2)
-        
+    
 
     def getXY(self):
         return (self.posx,self.posy)
-        
+
 class PointsEnv:
-    def __init__(self, width, height, numPoints, pointSize = 2, observation_noise = 5):
-        self.width = width
-        self.height = height
+    def __init__(self, numPoints, pointSize = 2, observation_noise = 5):
+        self.width = 640
+        self.height = 480
         self.numPoints = numPoints
         self.pointSize = pointSize
         self.points = []
         self.numPoints = numPoints
         self.pointSize = pointSize
         self.generatePoints()
-        self.boxSizeX = width / 20
-        self.boxSizeY = height / 20
+        self.boxSizeX = self.width / 20
+        self.boxSizeY = self.height / 20
         self.observation_noise = observation_noise
         self.dropOutProb = 0.2
-        self.randomNoiseProb = 1 #Tthe probability of adding a random noise to the observation, It can be 
+        self.randomNoiseProb = 1 #the probability of adding a random noise to the observation, It can be 
                                     # greater than 1, which adds more than 1 noise points
         self.clock = pygame.time.Clock()
 
@@ -85,11 +106,12 @@ class PointsEnv:
         #check if the point is inside the frame
         for point in self.points:
             if point.posx < 0 or point.posx > self.width or point.posy < 0 or point.posy > self.height :
-                pointID = point.pointID
-                self.points[pointID] = self.generatePoint(pointID)
+                point_id = point.point_id
+                self.points[point_id] = self.generatePoint(point_id)
         
         self.clock.tick(60+random.randrange(-20,20)) #This limits The env to 60 frames per second by adding delay to the loop
 
+    def get_obs_single_sensor(self):
         #return the observation as a 1D array
         observation = np.empty((self.numPoints,2))
         for i in range(len(self.points)):
@@ -111,32 +133,38 @@ class PointsEnv:
                 noise_volume -= 1
         return observation
 
+    def get_obs_multi(self, sensor_config_array):
+        '''
+        Get the observation from multiple sensors giving sensor config and and points
+        '''
+
+        observation = {}
     def get_last_dt(self):
         return self.clock.get_time()/1000.0
 
-    def draw(self, screen):
-        '''
-        Draw the enviroment
-        It draws the ground truth with a white dot
-        It also draws a bounding box
-        '''
-        for point in self.points:
-            pygame.draw.circle(screen, (255, 255, 255), point.getXY() , self.pointSize)
-            #draw a box polygon around the point, rotate it by the point's twist
-            #and draw it on the screen
-            box = [(point.posx - self.boxSizeX, point.posy - self.boxSizeY),
-                   (point.posx + self.boxSizeX, point.posy - self.boxSizeY),
-                   (point.posx + self.boxSizeX, point.posy + self.boxSizeY),
-                   (point.posx - self.boxSizeX, point.posy + self.boxSizeY)]
-            box = np.array(box)
+    # def draw(self, screen):
+    #     '''
+    #     Draw the enviroment
+    #     It draws the ground truth with a white dot
+    #     It also draws a bounding box
+    #     '''
+    #     for point in self.points:
+    #         pygame.draw.circle(screen, (255, 255, 255), point.getXY() , self.pointSize)
+    #         #draw a box polygon around the point, rotate it by the point's twist
+    #         #and draw it on the screen
+    #         box = [(point.posx - self.boxSizeX, point.posy - self.boxSizeY),
+    #                (point.posx + self.boxSizeX, point.posy - self.boxSizeY),
+    #                (point.posx + self.boxSizeX, point.posy + self.boxSizeY),
+    #                (point.posx - self.boxSizeX, point.posy + self.boxSizeY)]
+    #         box = np.array(box)
 
-            box = box.astype(np.int32)
-            #rotate the box using numpy, origin is the center of the box
-            box_relative = np.dot(np.array([[math.cos(point.twist), -math.sin(point.twist)],
-                                            [math.sin(point.twist), math.cos(point.twist)]]),
-                                                            (box - box.mean(axis=0)).T )
-            box = box_relative.T + box.mean(axis=0)
-            pygame.draw.polygon(screen, (50, 200, 50), box, width=3)
+    #         box = box.astype(np.int32)
+    #         #rotate the box using numpy, origin is the center of the box
+    #         box_relative = np.dot(np.array([[math.cos(point.twist), -math.sin(point.twist)],
+    #                                         [math.sin(point.twist), math.cos(point.twist)]]),
+    #                                                         (box - box.mean(axis=0)).T )
+    #         box = box_relative.T + box.mean(axis=0)
+    #         pygame.draw.polygon(screen, (50, 200, 50), box, width=3)
 
     def draw_observed_points(self,screen,obsList):
         for i in range(len(obsList)):
@@ -167,16 +195,17 @@ class PointsEnv:
 if __name__ == "__main__": #This is for testing the enviroment
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
-    env = PointsEnv(640, 480, 10)
+    env = PointsEnv(10)
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print('time elapsed: ', env.get_time_elapsed())
+                # print('time elapsed: ', env.get_time_elapsed())
                 pygame.quit()
                 quit()
         screen.fill((0, 0, 0))
-        env.draw(screen)
-        observation = env.update()
+        # env.draw(screen)
+        env.update()
+        observation = env.get_obs_single_sensor()
         env.draw_observed_points(screen, observation)
         # print(env.getObservation())
         pygame.display.update()
