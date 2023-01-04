@@ -489,7 +489,7 @@ if __name__ == "__main__":
 
     pygame.init()
     screen = pygame.display.set_mode((640, 480))
-    env = PointsEnv(640, 480, 2)
+    env = PointsEnv(2)
     observation = env.update()
     tracker = MultiTracker(obs=observation)
     while True:
@@ -499,7 +499,8 @@ if __name__ == "__main__":
                 quit()
         screen.fill((0, 0, 0))
         # env.draw(screen)
-        observation = env.update()
+        env.update()
+        observation = env.get_obs_single_sensor()
         env.draw_observed_points(screen, observation)
         obs = np.array(observation)
         start_time = time.time()
